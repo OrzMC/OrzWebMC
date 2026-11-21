@@ -139,7 +139,7 @@ WS binary message  =  [ MC 包 id (VarInt) ][ 包体字段 ... ]
 
 | 版本 | 引入 | 差异要点 |
 |---|---|---|
-| v1 | 1.5.2 | 首帧形态不同（`0x01 0x01` + MC 协议 + brand）；无 WS 握手框架；需包翻译，**不支持** |
+| v1 | 1.5.2 | 首帧是 `0x01 0x01` + `u8` MC 协议 + brand + version（没有版本表）；需要 1.5→1.8 的包翻译，**不支持** |
 | v2 | 1.8.8 早期 | 固定支持 eagler v2 + MC 47；`DENY_LOGIN` 消息用 `u8` 长度 |
 | v3 | 主流 1.8.8 | 增加认证方式（`authMethod` + salt）与 profile data；`DENY_LOGIN`/错误消息用 `u16` 长度；`ALLOW_LOGIN` 仍只有 name+UUID |
 | v4 | 过渡 | `REQUEST_LOGIN` 增加 cookie；能力位由服务端 fallback 决定；`ALLOW_LOGIN` 仍为 name+UUID |
@@ -300,7 +300,7 @@ Eagler 客户端在服务器列表里会对同一个 `wss://` 地址发起**查�
 
 ## 7. 参考实现：EaglerXServer 内部结构
 
-上游 `lax1dude/eaglerxserver`（1.1.1，GPL 风格 ARR）是唯一完整实现。它的做法值得学习，
+上游 `lax1dude/eaglerxserver`（1.1.1，All Rights Reserved）是唯一完整实现。它的做法值得学习，
 但**不适合直接当我们的架构**（见 §7.4）。
 
 ### 7.1 注入点
