@@ -240,9 +240,9 @@ S→C: u8 0x09        # 无 payload
 
 | 帧 | v2 | v3 | v4 | v5 |
 |---|---|---|---|---|
-| CLIENT_VERSION | 同 v3 | 基線 | 同 v3 | 同 v3（authUsername 必填） |
+| CLIENT_VERSION | 同 v3 | 基线 | 同 v3 | 同 v3（authUsername 必填） |
 | SERVER_VERSION | 无 nickname 字段 | 同 v2 | 同 v2 | + `nicknameSelection` |
-| REQUEST_LOGIN | 无 cookie | 基線 | + cookie | + caps/ext |
+| REQUEST_LOGIN | 无 cookie | 基线 | + cookie | + caps/ext |
 | ALLOW_LOGIN | name+UUID | 同 v2 | 同 v2 | + caps/ext |
 | PROFILE_DATA | 单条 | 单条 | 批量 | 批量 |
 | DENY/ERROR 长度 | `u8` | `u16` | `u16` | `u16` |
