@@ -510,7 +510,7 @@ JSON 最小字段（参考 `MOTDConnectionWrapper`）：
 00 02 00 03            # 支持 v2, v3
 00 01                  # mc count = 1
 00 2F                  # MC 47
-0A "Eaglercraft"       # brand（示例）
+0B "Eaglercraft"       # brand（示例，11 字节）
 02 "u1"                # version（示例）
 00                     # auth = false
 0A "TestPlayer"        # username
