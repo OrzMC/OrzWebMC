@@ -97,7 +97,7 @@ WebMC.reload()
 
 ## 5. 运行（Docker，推荐）
 
-> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.0`（以及 `latest`），
+> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.1`（以及 `latest`），
 > digest `sha256:caa2b4cbf28fb76673528a1c264f761f3c232f51cd1f8846801de37cd26e5f2c`。
 > GHCR 包当前是 **private**：在 GitHub Packages 里改为 public，或先 `docker login ghcr.io`；
 > 也可用本仓库 `docker-compose.yml` 的 `build: .` 本地构建。
@@ -157,7 +157,7 @@ webclient.example.com {
 ```yaml
 services:
   webmc:
-    image: ghcr.io/orzmc/orzmc-webmc:0.1.0
+    image: ghcr.io/orzmc/orzmc-webmc:0.1.1
     restart: unless-stopped
     ports:
       - "127.0.0.1:8300:8300"

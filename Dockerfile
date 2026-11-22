@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# 构建阶段：使用固定 Gradle + JDK 21，避免依赖宿主机环境
+# 构建阶段：使用固定 Gradle + JDK 17（与 Gradle toolchain 一致），避免依赖宿主机环境
 FROM gradle:9.9-jdk17 AS build
 WORKDIR /src
 COPY settings.gradle.kts build.gradle.kts gradle.properties ./

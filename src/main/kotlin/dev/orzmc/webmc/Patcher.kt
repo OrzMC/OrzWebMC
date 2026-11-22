@@ -19,29 +19,52 @@ internal class Patcher(private val cacheDir: Path) {
     fun prepare(entry: VersionEntry): Path = synchronized(locks.computeIfAbsent(entry.info.id) { Any() }) {
         if (entry.inject == InjectMode.NONE) return entry.client
 
-        val text = Files.readString(entry.client, StandardCharsets.UTF_8)
-        val native = text.contains("joinServer")
+        val cache = cacheDir.resolve(
+            "${entry.info.id}-${Files.getLastModifiedTime(entry.client).toMillis()}-${Files.size(entry.client)}.html"
+        )
+        if (Files.isRegularFile(cache) && Files.size(cache) > 0L) return cache
+
+        // 78 MB 单文件客户端不要先 readString 再 replace：String 的 char[]/UTF-8 副本
+        // 会把 512M 堆撑爆（生产首测 OutOfMemoryError）。按字节插入，峰值约 2×源文件。
+        val bytes = Files.readAllBytes(entry.client)
+        val native = indexOf(bytes, "joinServer".toByteArray(StandardCharsets.US_ASCII)) >= 0
         if (native && entry.inject == InjectMode.AUTO) {
             log.info("{}: client already reads joinServer, serving as-is", entry.info.id)
             return entry.client
         }
 
-        val anchor = "window.eaglercraftXOpts = {"
-        if (!text.contains(anchor)) {
+        val anchor = "window.eaglercraftXOpts = {".toByteArray(StandardCharsets.US_ASCII)
+        val at = indexOf(bytes, anchor)
+        if (at < 0) {
             log.warn("{}: no eaglercraftXOpts anchor; deep link will need ?server= support in the client", entry.info.id)
             return entry.client
         }
 
-        val patched = text.replaceFirst(anchor, "$anchor $JOIN_SERVER")
+        val insertion = (" $JOIN_SERVER").toByteArray(StandardCharsets.US_ASCII)
+        val cut = at + anchor.size
+        val patched = ByteArray(bytes.size + insertion.size)
+        bytes.copyInto(patched, 0, 0, cut)
+        insertion.copyInto(patched, cut)
+        bytes.copyInto(patched, cut + insertion.size, cut, bytes.size)
+
         Files.createDirectories(cacheDir)
-        val cache = cacheDir.resolve("${entry.info.id}-${Files.getLastModifiedTime(entry.client).toMillis()}-${Files.size(entry.client)}.html")
-        if (!Files.isRegularFile(cache) || Files.size(cache) == 0L) {
-            val tmp = Files.createTempFile(cacheDir, "patch-", ".html")
-            Files.writeString(tmp, patched, StandardCharsets.UTF_8)
-            Files.move(tmp, cache, StandardCopyOption.REPLACE_EXISTING)
-            log.info("{}: generated patched client {}", entry.info.id, cache.fileName)
-        }
+        val tmp = Files.createTempFile(cacheDir, "patch-", ".html")
+        Files.write(tmp, patched)
+        Files.move(tmp, cache, StandardCopyOption.REPLACE_EXISTING)
+        log.info("{}: generated patched client {}", entry.info.id, cache.fileName)
         return cache
+    }
+
+    private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
+        if (needle.isEmpty()) return 0
+        if (needle.size > haystack.size) return -1
+        outer@ for (i in 0..(haystack.size - needle.size)) {
+            for (j in needle.indices) {
+                if (haystack[i + j] != needle[j]) continue@outer
+            }
+            return i
+        }
+        return -1
     }
 
     private companion object {
