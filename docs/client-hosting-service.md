@@ -99,8 +99,8 @@ WebMC.reload()
 
 > 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.1`（以及 `latest`），
 > digest `sha256:eeb28e3bc2499d69ae89ec3ae133c9b92a19c4afe89ba5eb3e87bbb0d171e47a`。
-> GHCR 包当前是 **private**：在 GitHub Packages 里改为 public，或先 `docker login ghcr.io`；
-> 也可用本仓库 `docker-compose.yml` 的 `build: .` 本地构建。
+> GHCR 包已设为 **public**，可直接 `docker pull`（无需登录）；也可用本仓库
+> `docker-compose.yml` 的 `build: .` 本地构建。
 
 ```bash
 # 1) 准备数据目录（客户端自己下载，不要入库）
