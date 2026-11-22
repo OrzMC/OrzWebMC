@@ -1,6 +1,6 @@
 # Web 客户端托管服务（webmc）
 
-> **状态**：实现中 / 可运行（2026-11-22）。Kotlin 2.4 + Ktor 3.6；单容器，数据目录挂载。
+> **状态**：可运行 / 本地验收通过（2026-11-22）。Kotlin 2.4 + Ktor 3.6；单容器，数据目录挂载。
 > **定位**：给「Eaglercraft 网页客户端」提供一个**自托管入口、深链、外嵌**服务。
 > **不包含客户端本体**：客户端由部署者自行下载放进数据目录，镜像/仓库/发布物零客户端文件。
 
@@ -197,12 +197,20 @@ services:
 docker build -t orzmc-webmc:dev .
 ```
 
-已验证（2026-11-22）：
+本地验收（2026-11-22，真实官方 26.3 HTML 78,124,802 B）：
 
-- 单元/路由测试：版本发现、`/play` 注入、`/embed`、`/api/versions`、`/api/health`、token、路径穿越。
-- 真实官方 26.3 HTML（78,124,802 B）放入数据目录：`/play` 返回 78,124,961 B 的注入版；
-  `joinServer` 存在；服务本地启动正常。
-- 无头 Edge：patch 版首次 Edit Profile → Done、Default Username → Continue Anyway 后
-  自动连接测试服（白名单踢出）。
+| 项 | 结果 |
+|---|---|
+| `./gradlew clean test` | 通过（版本/注入/embed/API/token/穿越；并修复注入双逗号） |
+| `/api/health` / `/api/versions` | `{"status":"ok","versions":1}` / 26.3（777, wasm-gc） |
+| `/` 启动页 | 正常列出 26.3 |
+| `/client/26.3/assets/test.js` | 200；路径穿越 404 |
+| `/play?version=26.3` | 200，`Content-Length: 78124960`；含 `joinServer`，无 `,,` |
+| `/embed?...` | 200，iframe + `WebMC` 脚本；CSP frame-ancestors 生效 |
+| token | 无 token 401；带 token 200；embed 带 token 200 |
+| 无头 Edge | 首次 Edit Profile → Done、Default Username → Continue Anyway 后自动连测试服（白名单踢出） |
+| Docker 运行镜像（temurin 25 本地验证） | 健康/API/`/play` 200（78,124,960 B，约 6s）；缓存生成正常 |
 
-> 真实客户端文件只用于本地验证，**没有**提交到仓库/镜像。
+> 首次 `/play` 在 `/mnt/e`（Windows 文件系统）生成补丁约 40s，缓存后约 13s；
+> Docker/ext4 约 6s。多阶段 `Dockerfile` 因本机 Docker Hub 拉取超时未跑；`gradle:9.9-jdk21`
+> 标签已核对存在，需在 CI/生产机跑一次。真实客户端文件只用于本地验证，**没有**提交到仓库/镜像。
