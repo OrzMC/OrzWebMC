@@ -70,7 +70,9 @@ https://webclient.example.com/play?version=26.3&server=wss%3A%2F%2Fyour-host%3A4
   （`eaglercraftXOpts.joinServer`），源文件不改、镜像不存客户端。
 - 首次启动仍会走客户端自己的 **Edit Profile → Done**、**Default Username → Continue Anyway**；
   之后同一浏览器不再问。
-- 不同版本：放 `data/versions/1.8.8/client.html`，访问 `?version=1.8.8`。
+- 不同版本：放 `data/versions/<id>/client.html`，访问 `?version=<id>`。
+  官方可用版本：`1.8.8`（47）、`1.12.2`（340）、`26.2`（776）、`26.3`（777）。
+  1.8.8/1.12.2 的 `meta.json` 必须写 `"inject": "joinServer"`（否则深链不会自动连服）。
 
 ---
 
