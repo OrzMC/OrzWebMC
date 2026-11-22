@@ -63,6 +63,68 @@
 > C 不是替代品：它解决的是「浏览器如何开 TCP/正版登录」，覆盖面窄；未来可作为
 > 「正版登录/低延迟」补充通道，与本网关并存。
 
+### 2.1 与 EaglerXServer 的逐项对比
+
+> 基线：EaglerXServer **1.1.1**（2026-08）+ Velocity 4.3.1；我们：**Kotlin 网关（本仓，未实现）**。
+> 图例：✅ 优 / ⚠️ 有条件 / ❌ 缺。
+
+| 维度 | EaglerXServer | 我们的网关 | 结论 |
+|---|---|---|---|
+| 架构位置 | 注入代理/服务端的 Netty pipeline | **独立进程**（反代之后） | 我们隔离性好；它少一跳 |
+| 后端侵入 | 必须装插件（Spigot/Bungee/Velocity） | **零插件**，对后端就是普通离线客户端 | ✅ 我们 |
+| 平台覆盖 | Spigot ≤1.17、Bungee、Velocity；新 Paper 靠 `EaglerXPaper`（反编译 fork） | Paper/Folia 直连或 Velocity，不依赖平台内部 | ✅ 我们 |
+| Folia | Bukkit 平台不支持；只能在 Velocity 层用 | 直连或代理均可 | ✅ 我们 |
+| 多后端 / 切服 | 依赖 Velocity 的 `/server` | 网关按 Host/path 路由 + Velocity 切服 | 相当 |
+| 客户端版本 | 1.5.2（Rewind）/ 1.8 / 1.12.2 / 26.x v5 | 1.8.8 / 1.12.2 / 26.x（v3/v5）；**不做 1.5.2** | ⚠️ 它更全 |
+| 皮肤 / 披风 | 内置（profile data 缓存 + SkinsRestorer hook） | P1 无；P2 可做中继 | ❌ 我们 |
+| 语音 | 内置 WebRTC 信令/转发 | 无 | ❌ 我们 |
+| MOTD / 查询 | 内置（动画、缓存、图标） | P2 用 Server List Ping 生成基础版 | ⚠️ 我们 |
+| 通知/WebView/暂停菜单/更新证书 | 内置 | 无 | ❌ 我们 |
+| 后端 RPC（如 per-player 视距） | 有 `EaglerXBackendRPC` | 无（可加小插件） | ❌ 我们 |
+| 自定义 UUID | Velocity/Bungee API `setProfileUUID` | 离线 UUID；自定义需插件或实测代理行为 | ❌ 我们（重要） |
+| 真实 IP | 反代 `X-Real-IP` + `forward_ip`（缺头直接断） | 反代 `X-Real-IP` + **PROXY v2** 到 Velocity | 相当；我们多一层配置 |
+| 限流 / Origin | 内置 origin 白/黑名单、IP 限流 | 自研，更细（连接/帧/解压/令牌） | ⚠️ 我们灵活但未验证 |
+| 性能 / 延迟 | 进程内，少一跳 | 独立进程，多一跳回环 | ⚠️ 它略优（回环可忽略） |
+| 部署 / 升级 | 丢一个 jar 进代理/实例 | 多一个进程/容器 + 配置 + TLS 上游 | ⚠️ 它更简单 |
+| 版本跟随风险 | 跟 NMS/Velocity 反射，大版本易断 | 只跟 Eagler 握手 + MC 登录字段 | ✅ 我们 |
+| 可观测 | 代理日志 + 插件日志 | 自带连接 id、指标、结构化日志 | ✅ 我们 |
+| 许可证 / 可改 | ARR（二进制可用，改源码受限） | Apache-2.0 自研 | ✅ 我们 |
+| 成熟度 | 现网跑通、有 issue 历史 | 未实现；`protocol-spec` §9 有 10 项待真机确认 | ❌ 我们 |
+| 开发成本 | 0（现成） | P1–P3 自研 | ❌ 我们 |
+
+#### 我们的优点（归纳）
+
+1. **零侵入 + 版本解耦**：不碰 NMS/Velocity 内部，Paper/Velocity 升级不会因为反射断掉；
+   只需跟 Eagler 握手（v3/v5）与 MC 登录字段。
+2. **独立运维**：独立进程可灰度、蓝绿、重启、水平扩容；不把 Web 流量塞进代理进程。
+3. **多租户/路由**：一个网关按 Host/path/`requestedServer` 接多个后端；EaglerXServer 主要靠代理。
+4. **安全策略点集中**：Origin、真实 IP、限流、帧上限、解压上限、令牌都在网关做。
+5. **可观测/可改**：自己的指标与日志；Apache-2.0，可修 bug、可定制。
+6. **协议面小**：PLAY 零解析，长期维护成本低。
+
+#### 我们的缺点（归纳）
+
+1. **功能缺口**：皮肤/披风、语音、MOTD 动画、通知/WebView/更新证书、后端 RPC 都要自补；
+   其中 **自定义 UUID** 是最实质的差距（EaglerXServer 可在代理层改 UUID）。
+2. **未验证**：26.x 的 v5 细节、LoginAck 去重、caps=0、大帧/分片、压缩炸弹等都要真机确认。
+3. **多一个进程**：部署/监控/升级多一套；JVM 基线内存与 EaglerXServer 相当（都跑 JVM）。
+4. **协议要自己跟**：Eagler 客户端若出 v6 或改行为，需要我们自己适配（上游可能更快）。
+5. **1.5.2 不支持**：EaglerXServer + EaglerXRewind 支持；我们 P1 明确不做。
+6. **开发成本**：P1–P3 的代码 + 测试 + 文档，都是新增投入。
+
+#### 什么时候选哪个
+
+| 场景 | 建议 |
+|---|---|
+| 现在就要皮肤/语音/完整功能，或不想维护协议 | **EaglerXServer**（现网继续用） |
+| 要长期跟 Paper/Velocity 升级、要独立限流/多租户/自定义身份 | **我们的网关** |
+| 两者都想要 | **并存灰度**：EaglerXServer 保底，网关按域名/玩家灰度 |
+| 产品要求「Web 玩家绑定已有 Java 账号（同一 UUID）」 | 先补 **Velocity/Paper 小插件**（网关提供令牌/标记），否则达不到 EaglerXServer 的 UUID 能力 |
+| 需要 1.5.2 客户端 | 继续 EaglerXServer + EaglerXRewind |
+
+> 结论不变：**B 为主、A 兜底**；但在皮肤/语音/UUID 这三项上，A 目前明显更强。
+> 功能对等前不要把生产入口完全切到网关。
+
 ---
 
 ## 3. 推荐架构
