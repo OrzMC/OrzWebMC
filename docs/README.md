@@ -1,10 +1,12 @@
 # OrzWebMC 文档索引
 
-> 本仓文档只讲**浏览器连服**这一件事：Eaglercraft 怎么工作、网关要实现什么、怎么落地与验收。
+> 本仓现在的主线是 **Web 客户端托管服务**（自部署入口/深链/外嵌，不含客户端本体）；
+> Eaglercraft 原理与「自研协议网关」调研保留为背景/暂缓方案。
 > 服务端运维细节在 `OrzMCDeploy`，玩家入口在 `OrzMCSite`，不在这里重复。
 
 | 文档 | 状态 | 读者 | 内容 |
 |:--|:--|:--|:--|
+| [client-hosting-service.md](client-hosting-service.md) | **可运行（2026-11-22）** | 部署 / 集成 | **Web 客户端托管服务**：数据目录/版本发现、`/play` 深链、`/embed`、API、Docker、与 site/OrzMCDeploy 集成 |
 | [eaglercraft-internals.md](eaglercraft-internals.md) | P0 完成（2026-11-22） | 所有人 | **原理拆解**：两代客户端、传输层、握手、登录时序、服务端参考实现、能力/皮肤/语音、限制与陷阱 |
 | [protocol-spec.md](protocol-spec.md) | 草案（待真机补 v5 细节） | 实现者 | **网关协议规范**：状态机、字节级帧格式、版本差异、MC 登录处理、错误码、验收向量 |
 | [gateway-design.md](gateway-design.md) | 草案（待维护者决策） | 决策者 / 实现者 | **方案与实施**：候选对比、推荐架构、路由/身份/安全、技术选型、里程碑、验收、风险 |

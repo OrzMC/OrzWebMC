@@ -1,0 +1,9 @@
+{
+  "id": "26.3",
+  "name": "Eaglercraft 26.3",
+  "client": "client.html",
+  "protocol": 777,
+  "runtime": "wasm-gc",
+  "notes": "官方 26.3 单文件客户端（由部署者自行下载放置）",
+  "inject": "auto"
+}
