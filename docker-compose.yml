@@ -1,0 +1,22 @@
+services:
+  webmc:
+    build: .
+    # 也可用发布镜像：image: ghcr.io/orzmc/orzmc-webmc:0.1.0
+    image: orzmc-webmc:0.1.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8300:8300"   # 只给反代；不要直接暴露公网
+    volumes:
+      - ./webmc-data:/data
+    environment:
+      # 允许被哪些站点 iframe 嵌入（CSP frame-ancestors）
+      WEBMC_FRAME_ANCESTORS: "https://orzmc.jokerhub.cn"
+      WEBMC_PUBLIC_BASE_URL: "https://webclient.example.com"
+      # 可选：私有入口令牌（配置后 /play、/embed、/client 必须带 ?token=）
+      # WEBMC_ACCESS_TOKEN: "change-me"
+      # 可选：默认版本（否则用数据目录里排序最后的版本）
+      # WEBMC_DEFAULT_VERSION: "26.3"
+
+# 数据目录（用户自己放客户端，镜像不含客户端本体）：
+#   webmc-data/versions/26.3/client.html
+#   webmc-data/versions/26.3/meta.json   （可选）

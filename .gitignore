@@ -1,1 +1,12 @@
 .DS_Store
+.gradle/
+build/
+.idea/
+*.iml
+
+# 客户端本体不进 Git：只保留说明与示例
+data/.cache/
+data/versions/*
+!data/versions/README.md
+!data/versions/meta.example.json
+.kotlin/
