@@ -377,13 +377,14 @@ window.eaglercraftXOpts = {
 // 模板还支持 ?server=<addr> → joinServer
 ```
 
-> 26.3 官方分发页的 HTML **写死了 opts**、没有 `servers`，`/play` 也没有 server 参数
-> （`deploy` 已实测）。所以「点开即进服」只有两条路：
-> ① 自建/自编译客户端页面（可预置 `servers`/`joinServer`）；
-> ② 不自托管，引导玩家「打开官方客户端 → 直连 → 粘贴 wss 地址」（现网方案）。
+> **2026-11-22 实测修正**：官方站支持深链
+> `/play?joinServer=<wss 地址>&version=<客户端版本>`（首页服务器目录的「加入」就是这种链接；
+> 页面会把 `joinServer` 传给客户端的 `launchOptions.joinServer`）。所以「点开即进服」**不需要**
+> 自托管客户端：直接链官方深链即可（`site` 的「在浏览器中玩」已改成这种方式）。
+> 自建/自编译客户端页面仍可选（预置多服/离线单文件），但不再是必需。
 >
-> **许可证**：Eaglercraft 客户端为 **All Rights Reserved**，且项目本身不符合 Mojang EULA。
-> 分发客户端本体有法律风险；本仓默认**不分发**（决策项见 gateway-design §14）。
+> 官方分发页仍**不能 iframe**（`X-Frame-Options: DENY`）；客户端本体也不分发
+> （**All Rights Reserved**，且项目不符合 Mojang EULA；见 gateway-design §17）。
 
 ### 8.3 地址解析与 TLS
 

@@ -349,8 +349,15 @@ caddy reload --config /etc/caddy/Caddyfile
 | Eaglercraft 1.8.8 | `wss://play.example.com/` | 页面是 https 时自动 wss |
 | 路径路由 | `wss://play.example.com/s/survival` | 若配置了 path 路由 |
 
-玩家流程：打开官方客户端 → 多人游戏 → 直连 → 粘贴 `wss://...` → Join。
-（官网卡片已有「在浏览器中玩」+ 复制地址，见 `site`。）
+**推荐：官方深链（无需自托管客户端）**：
+
+```text
+https://eaglercraft.com/play?joinServer=wss%3A%2F%2Fplay.example.com&version=26.3
+```
+
+- `joinServer` 放 URL 编码后的 `wss://` 地址；`version` 放客户端版本（26.3 / 1.8.8 / 1.12.2）。
+- 官方页会把它传给客户端并**直接进服**；站点「在浏览器中玩」按钮已自动拼接（`site` #28）。
+- 兜底流程：打开官方客户端 → 多人游戏 → 直连 → 粘贴 `wss://...`（按钮同时复制地址）。
 
 ---
 
