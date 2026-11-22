@@ -378,10 +378,12 @@ window.eaglercraftXOpts = {
 ```
 
 > **2026-11-22 实测修正**：官方站支持深链
-> `/play?joinServer=<wss 地址>&version=<客户端版本>`（首页服务器目录的「加入」就是这种链接；
-> 页面会把 `joinServer` 传给客户端的 `launchOptions.joinServer`）。所以「点开即进服」**不需要**
-> 自托管客户端：直接链官方深链即可（`site` 的「在浏览器中玩」已改成这种方式）。
-> 自建/自编译客户端页面仍可选（预置多服/离线单文件），但不再是必需。
+> `/play?joinServer=<wss 地址>&version=<客户端版本>&launch=1`（首页服务器目录的「加入」即这种链接；
+> 页面把 `joinServer` 传给客户端的 `launchOptions.joinServer`，`launch=1` 是**自动启动**开关，
+> 跳过「启动游戏」按钮）。所以「点开即进服」**不需要**自托管客户端：直接链官方深链即可
+> （`site` 的「在浏览器中玩」已改成这种方式）。
+> 未登录首次启动时，官方页可能弹一次「登录以保存你的进度」，点 × 关闭即可；
+> 自建/自编译客户端页面仍可选（预置多服/离线单文件、彻底免官方弹窗），但不再是必需。
 >
 > 官方分发页仍**不能 iframe**（`X-Frame-Options: DENY`）；客户端本体也不分发
 > （**All Rights Reserved**，且项目不符合 Mojang EULA；见 gateway-design §17）。
