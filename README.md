@@ -60,6 +60,7 @@ Wasm-GC），并在传输层把 TCP 换成 WebSocket**：
 | **Eaglercraft 原理拆解**（客户端、握手、帧、压缩、限制） | [`docs/eaglercraft-internals.md`](docs/eaglercraft-internals.md) |
 | **网关协议规范**（要实现什么，字节级） | [`docs/protocol-spec.md`](docs/protocol-spec.md) |
 | **网关架构与实施计划**（怎么实现、怎么验收） | [`docs/gateway-design.md`](docs/gateway-design.md) |
+| **部署手册**（拓扑/端口/配置/上线/排障） | [`docs/deployment.md`](docs/deployment.md) |
 | 证据、上游源码位置、复现脚本 | [`docs/references.md`](docs/references.md) |
 | 现有 Eagler 线上验证（拓扑、插件矩阵、1006 排查） | `OrzMC/OrzMCDeploy` → `docs/eaglercraft.md`、`docs/eaglercraft-deploy.md` |
 | 官网玩家入口（Web 地址、按钮） | `OrzMC/OrzMCSite` |
