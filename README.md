@@ -78,8 +78,9 @@ Wasm-GC），并在传输层把 TCP 换成 WebSocket**：
   后端 **Paper 直连** 或 **Velocity**（网关作为普通离线客户端接入，无需实现 Velocity 转发）。
 - **起步建议 S1（最省）**：Caddy + gateway + 单个 Paper，一个 YAML + 一个 Caddy block；
   不要一上来就上 Velocity/HAProxy（见 `docs/deployment.md` §1.3 成本对比）。
-- **一键进服已解决**：官方站支持 `/play?joinServer=<wss>&version=<ver>` 深链（2026-11-22 实测），
-  `site` 的「在浏览器中玩」已改为直接进服；无需自托管客户端，也不影响「不替换 EaglerXServer」。
+- **一键进服已解决**：官方站支持 `/play?joinServer=<wss>&version=<ver>&launch=1` 深链
+  （`launch=1` 自动启动，免点「启动游戏」；2026-11-22 实测），`site` 的「在浏览器中玩」已改为直接进服；
+  无需自托管客户端，也不影响「不替换 EaglerXServer」。
 - **已定**：实现语言 **Kotlin 2.4.x**（JVM 21+，Netty + 协程；2026-11-22）。
 - **合规口径**：Eaglercraft **不符合 Mojang EULA**；本仓只降低自己的暴露面（不分发/不修改客户端、不商业化、只连自有服务器），**不宣称合规**。
 - **主要未决**：与 EaglerXServer 的关系（D2）、是否自建客户端页面（D3，许可证风险）、

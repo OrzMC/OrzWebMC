@@ -352,11 +352,13 @@ caddy reload --config /etc/caddy/Caddyfile
 **推荐：官方深链（无需自托管客户端）**：
 
 ```text
-https://eaglercraft.com/play?joinServer=wss%3A%2F%2Fplay.example.com&version=26.3
+https://eaglercraft.com/play?joinServer=wss%3A%2F%2Fplay.example.com&version=26.3&launch=1
 ```
 
-- `joinServer` 放 URL 编码后的 `wss://` 地址；`version` 放客户端版本（26.3 / 1.8.8 / 1.12.2）。
-- 官方页会把它传给客户端并**直接进服**；站点「在浏览器中玩」按钮已自动拼接（`site` #28）。
+- `joinServer` 放 URL 编码后的 `wss://` 地址；`version` 放客户端版本（26.3 / 1.8.8 / 1.12.2）；
+  `launch=1` 让官方页**自动启动**（不加则停在「启动游戏」按钮）。
+- 官方页会把它传给客户端并**直接进服**；站点「在浏览器中玩」按钮已自动拼接（`site` #28/#29）。
+- 未登录首次启动时，官方页可能弹一次「登录以保存你的进度」，点 × 关闭即可（同一标签页后续不再弹）。
 - 兜底流程：打开官方客户端 → 多人游戏 → 直连 → 粘贴 `wss://...`（按钮同时复制地址）。
 
 ---
