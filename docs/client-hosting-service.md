@@ -33,11 +33,24 @@ data/versions/
 ```
 
 - 目录名即版本 id（`[A-Za-z0-9._-]{1,64}`）；`meta.json` 可覆盖 id/name/client/protocol/runtime/notes/inject。
+
+官方可用版本与实测（2026-11-23）：
+
+| id | 客户端 | MC 协议 | 运行时 | `inject` | 生产已验证 |
+|---|---|---|---:|---|---|
+| `1.8.8` | 官方离线版 `eaglercraft1-8-62da5f39` | 47 | js | `joinServer` | EaglerXServer 握手 v3 |
+| `1.12.2` | 官方离线版 `eaglercraft1-12-62da5f39` | 340 | js | `joinServer` | EaglerXServer 握手 v3/v4 |
+| `26.2` | 官方 `eaglercraft-26.2-fe8f1237` | 776 | wasm-gc | `auto` | 无头 Edge 自动连服 |
+| `26.3` | 官方 `eaglercraft-26.3-590e4bd1` | 777 | wasm-gc | `auto` | 无头 Edge 自动连服 |
+
+> 1.5.2（Eagler v1）需要 `EaglerXRewind`，本服务/现网 EaglerXServer 不收录。
 - 服务启动时扫描；新增/更新版本后重启（热加载可后续加）。
 - 官方 26.3 HTML 不读 `?server=`；服务在**首次访问**时生成一份**缓存补丁**：
   在 `window.eaglercraftXOpts = {` 后注入 `joinServer: URLSearchParams(...).get("server")`。
   源文件不改；补丁文件在 `WEBMC_CACHE_DIR`（默认临时目录；容器内 `/tmp/webmc-cache`），不在镜像/仓库。
 - 客户端本身已支持 `joinServer` 时原样提供；`meta.inject=none` 可强制关闭注入。
+- ⚠️ 官方 **1.8.8 / 1.12.2** 代码里本来就有 `joinServer` 选项名，但不会读 URL；
+  必须写 `"inject": "joinServer"` 强制注入，否则 `auto` 会原样返回、深链不自动连服。
 
 ---
 

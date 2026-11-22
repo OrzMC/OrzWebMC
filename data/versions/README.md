@@ -20,6 +20,22 @@ data/versions/
 - 官方 26.3 客户端不读 `?server=`；服务会在首次访问时于内存/缓存中注入
   `eaglercraftXOpts.joinServer`（不修改源文件，不在仓库/镜像里保存 patch 后的本体）。
   如果客户端本身已支持 `joinServer`，会原样提供。
+- ⚠️ **1.8.8 / 1.12.2 必须写 `"inject": "joinServer"`**：这两个官方离线版代码里本来就有
+  `joinServer` 选项名，但不会从 URL 读取；`auto` 会误判为“已支持”而原样返回，深链不会自动连服。
+
+### 官方可用版本（2026-11-23 核对）
+
+| id | 官方资产（`cdn.eaglercraft.net/objects/dl/...`） | MC 协议 | 运行时 | `inject` |
+|---|---|---|---:|---|
+| `1.8.8` | `1.8.8/eaglercraft1-8-62da5f39.zip` | 47 | js | `joinServer` |
+| `1.12.2` | `1.12.2/eaglercraft1-12-62da5f39.zip` | 340 | js | `joinServer` |
+| `26.2` | `26.2/eaglercraft-26.2-fe8f1237-d6714264.zip` | 776 | wasm-gc | `auto` |
+| `26.3` | `26.3/eaglercraft-26.3-590e4bd1-3769e546.zip` | 777 | wasm-gc | `auto` |
+
+- 以上都是**单文件 HTML**（zip 内一个 `.html`）；解压后改名为 `client.html`。
+- 1.5.2 属于 Eagler 握手 v1，EaglerXServer 需要 `EaglerXRewind` 才能接；本项目不收录。
+- 1.12.2 还有 WASM 变体（`...-wasm-...zip`），但官方 1.12.2 的 JS 版对 `joinServer`
+  支持更明确；需要更快时再单独评估。
 
 ## meta.json（可选）
 
