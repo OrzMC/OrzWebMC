@@ -8,6 +8,7 @@
 | [eaglercraft-internals.md](eaglercraft-internals.md) | P0 完成（2026-11-22） | 所有人 | **原理拆解**：两代客户端、传输层、握手、登录时序、服务端参考实现、能力/皮肤/语音、限制与陷阱 |
 | [protocol-spec.md](protocol-spec.md) | 草案（待真机补 v5 细节） | 实现者 | **网关协议规范**：状态机、字节级帧格式、版本差异、MC 登录处理、错误码、验收向量 |
 | [gateway-design.md](gateway-design.md) | 草案（待维护者决策） | 决策者 / 实现者 | **方案与实施**：候选对比、推荐架构、路由/身份/安全、技术选型、里程碑、验收、风险 |
+| [deployment.md](deployment.md) | 契约/预演（P1 前） | 部署 / 运维 | **部署手册**：两种拓扑、端口/防火墙、后端/Velocity/网关/Caddy 配置、上线顺序、验收、排障、回滚 |
 | [references.md](references.md) | 持续更新 | 所有人 | 上游源码位置（`file:line`）、实测证据、复现命令、外部资料 |
 
 ## 阅读顺序
