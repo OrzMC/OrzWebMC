@@ -229,6 +229,15 @@ docker build -t orzmc-webmc:dev .
 | 无头 Edge | 首次 Edit Profile → Done、Default Username → Continue Anyway 后自动连测试服（白名单踢出） |
 | Docker 运行镜像（temurin 25 本地验证） | 健康/API/`/play` 200（78,124,960 B，约 6s）；缓存生成正常 |
 
+多版本生产验收（2026-11-23，`https://webmc.jokerhub.cn`）：
+
+| 版本 | `/play` | 注入 | 验证 |
+|---|---|---|---|
+| `1.8.8` | 200 / 34,880,416 B | 强制 `joinServer` | EaglerXServer v3/47 握手成功 |
+| `1.12.2` | 200 / 42,935,637 B | 强制 `joinServer` | EaglerXServer v3/v4/340 握手成功 |
+| `26.2` | 200 / 76,841,411 B | 缓存补丁 | 无头 Edge 自动连服（白名单踢出） |
+| `26.3` | 200 / 78,394,945 B | 缓存补丁 | 无头 Edge 自动连服（白名单踢出） |
+
 > 首次 `/play` 在 `/mnt/e`（Windows 文件系统）生成补丁约 40s，缓存后约 13s；
 > Docker/ext4 约 6s。多阶段 `Dockerfile` 因本机 Docker Hub 拉取超时未跑；`gradle:9.9-jdk21`
 > 标签已核对存在，需在 CI/生产机跑一次。真实客户端文件只用于本地验证，**没有**提交到仓库/镜像。
