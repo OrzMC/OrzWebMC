@@ -17,19 +17,31 @@
 
 ---
 
-## 1. 两种拓扑
+## 1. 拓扑选择（从简到繁）
 
-### 1.1 拓扑 A：最小可跑（测试服 / 单 Paper）
+> **起步不要上完整 B**。自用/单服/小范围用 **S1 = 拓扑 A** 就够：
+> Caddy + 一个网关 + 一个 Paper，一个 YAML + 一个 Caddy 站点块。
+> 只有需要多服/切服/真实 IP 时才逐级加组件。
+
+### 1.1 拓扑 A（S1）：最简，推荐起步
 
 ```text
 浏览器 ──wss──▶ Caddy ──ws+X-Real-IP──▶ gateway ──TCP(offline)──▶ Paper
 ```
 
-- 优点：组件最少，适合 P1 首通、单实例。
-- 缺点：Paper 直接看到的是网关 IP（真实 IP 透传要做插件）；没有多后端/切服。
-- 何时用：本地/测试服验证协议；正式多服不要用。
+- 优点：组件最少、配置最少；单服/自用/小范围完全够用。
+- 放弃：多后端/切服、真实 IP（Paper 只看到网关 IP）、皮肤/语音/MOTD、自定义 UUID。
+- 何时用：**推荐作为 P1 的起点**；也是本地验证协议的最短路径。
+- **S1 最小清单**：
+  - 一个 Paper（`online-mode=false` + 白名单 + LoginSecurity）；
+  - 一个网关实例、一个 route、anonymous；
+  - 一个 Caddy 站点块（复用现有 443）；
+  - **不做**：Velocity/HAProxy/PROXY、MOTD、皮肤、语音、令牌、Prometheus。
+  - 只支持**一个客户端代**（26.3/v5 或 1.8.8/v3）；两者都要同服才装 ViaVersion。
+  - Paper 的 `spigot.yml` 把 `settings.connection-throttle` 设为 `-1`：
+    所有 Web 玩家在 Paper 看来都来自网关 IP，默认的 4 秒连接节流会误伤。
 
-### 1.2 拓扑 B：推荐（生产 / 多后端 / Folia）
+### 1.2 拓扑 B（S3）：完整生产（多服 / 真实 IP / Folia）
 
 ```text
 Java 玩家 ──TCP──▶ HAProxy :25565 ──PROXY v2──▶┐
@@ -38,8 +50,8 @@ Java 玩家 ──TCP──▶ HAProxy :25565 ──PROXY v2──▶┐
 ```
 
 - 优点：Java/Web 都拿到**真实 IP**；多后端、`/server` 切服、已登录去重、Folia 可用；后端零 Eagler 插件。
-- 代价：比 A 多一个 Velocity + 一个 HAProxy；Velocity 只监听环回。
-- 何时用：正式服、多实例、需要真实 IP / 按 IP 限流。
+- 代价：比 A 多一个 Velocity + 一个 HAProxy；配置面从 2 个文件涨到 5–6 个。
+- 何时用：**只有**需要多服/切服、真实 IP/IP 封禁、多节点时才用；单服/自用不要上。
 
 > **为什么必须有 HAProxy（或等价的 TCP 入口）**：Velocity 的 `proxy-protocol` 是**全局**的
 > （`[advanced] proxy-protocol = true`）。一旦打开，**所有**连到该 listener 的连接都必须先发
@@ -52,9 +64,23 @@ Java 玩家 ──TCP──▶ HAProxy :25565 ──PROXY v2──▶┐
 > **PROXY v2 的方向**：HAProxy/gateway → Velocity 的 TCP 连接前发 PROXY 头；
 > Caddy → gateway 那一段用 `X-Real-IP` + 共享密钥头，不是 PROXY。
 
+### 1.3 成本对比（先选级别，再照对应章节做）
+
+| 级别 | 组成 | 配置面 | 适合 | 放弃 |
+|---|---|---|---|---|
+| **S0 现状** | Caddy + Velocity/Paper + **EaglerXServer** | 现有 | 零新增，最少改动 | 继续承担 NMS/反射维护；Folia 仅代理层 |
+| **S1 最简网关（推荐起步）** | Caddy + gateway + Paper | **1 YAML + 1 Caddy block** | 单服 / 自用 / 小范围 | 多服/切服、真实 IP、皮肤/语音/MOTD/UUID |
+| **S2 网关 + Velocity（B-lite）** | + Velocity | + `velocity.toml` | 多服/切服 | 真实 IP（Web 玩家显示网关 IP）；`login-ratelimit=0` |
+| **S3 完整 B** | + HAProxy | + `haproxy.cfg` | 真实 IP / IP 封禁 / 多节点 | 组件最多（唯一值得上 HAProxy 的场景） |
+
+> 维护成本大致：S1 是「一个 jar + 一个配置文件」；S3 是「网关 + Velocity + HAProxy + Caddy +
+> Paper 的转发密钥」五个面。**能停在 S1 就不要上 S2/S3。**
+
 ---
 
 ## 2. 端口与暴露面
+
+> **S1（推荐起步）只有三行**：Caddy、gateway、Paper；HAProxy 与 Velocity 是 S2/S3 才出现。
 
 | 组件 | 监听 | 暴露 | 说明 |
 |---|---|---|---|
@@ -67,7 +93,8 @@ Java 玩家 ──TCP──▶ HAProxy :25565 ──PROXY v2──▶┐
 
 防火墙口径：
 
-- 公网只开：`443/tcp`（Caddy）、`25565/tcp`（HAProxy/Java）、基岩需要的 UDP/TCP。
+- **S1**：公网只开 `443/tcp`（Caddy）；Java 玩家直连 Paper 的端口（如 25565）；8081 只给本机。
+- **S3**：公网只开 `443/tcp`（Caddy）、`25565/tcp`（HAProxy/Java）、基岩需要的 UDP/TCP。
 - **不要**把 gateway 的 8081、Velocity 的 25577、后端实例端口发布到公网。
 
 ---
@@ -116,7 +143,7 @@ proxies:
 
 自检：Java 客户端（离线）能进服、能执行 `/register` / `/login`。
 
-### 4.2 Velocity（拓扑 B）
+### 4.2 Velocity（仅拓扑 B/S2-S3；S1 跳过）
 
 `velocity.toml` 关键项：
 
@@ -142,7 +169,7 @@ read-timeout = 120000       # 大区块/慢网络；默认 30s 偏紧
 - **不要**把 25577 发布到公网；Java 玩家走 HAProxy，Web 玩家走 gateway。
 - 启动后自检：日志 `Listening on /127.0.0.1:25577`；Java 经 HAProxy 能进 lobby。
 
-### 4.2.1 HAProxy（Java 入口）
+### 4.2.1 HAProxy（仅拓扑 B/S3；S1/S2 跳过）
 
 `/etc/haproxy/haproxy.cfg` 片段：
 
@@ -307,8 +334,9 @@ caddy reload --config /etc/caddy/Caddyfile
 ### 4.5 DNS 与防火墙
 
 1. `play.example.com` A/AAAA 指向入口（或 Cloudflare 代理；注意 WS 要允许）。
-2. 路由器只转发 443（宿主映射）、25565（HAProxy）等必要端口；**不转发 8081/25577**。
-3. 若用云防火墙，放行 443/25565；后端端口不开放。
+2. **S1**：路由器只转发 443（宿主映射）与 Java 的 Paper 端口（通常 25565）；**不转发 8081**。
+   **S3**：额外把 25565 指向 HAProxy；**不转发 25577/8081**。
+3. 若用云防火墙，按上面口径放行；后端实例端口（S3）不开放。
 
 ---
 
@@ -327,6 +355,8 @@ caddy reload --config /etc/caddy/Caddyfile
 ---
 
 ## 6. 上线顺序（照这个顺序排障）
+
+> **S1 只做 1 → 4 → 5 → 6 → 7 → 8/9/10**（跳过 2/3 的 Velocity/HAProxy）。
 
 1. **后端**：Paper/Folia 启动、`Done`，Java 离线客户端能进（直连后端端口）。
 2. **Velocity**：`bind=127.0.0.1:25577`，启动日志 `Listening`。
