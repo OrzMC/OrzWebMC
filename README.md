@@ -61,6 +61,7 @@ Wasm-GC），并在传输层把 TCP 换成 WebSocket**：
 | **网关协议规范**（要实现什么，字节级） | [`docs/protocol-spec.md`](docs/protocol-spec.md) |
 | **网关架构与实施计划**（怎么实现、怎么验收） | [`docs/gateway-design.md`](docs/gateway-design.md) |
 | **部署手册**（拓扑/端口/配置/上线/排障） | [`docs/deployment.md`](docs/deployment.md) |
+| **自托管客户端兜底**（官方不可用时） | [`docs/self-hosted-client.md`](docs/self-hosted-client.md) |
 | 证据、上游源码位置、复现脚本 | [`docs/references.md`](docs/references.md) |
 | 现有 Eagler 线上验证（拓扑、插件矩阵、1006 排查） | `OrzMC/OrzMCDeploy` → `docs/eaglercraft.md`、`docs/eaglercraft-deploy.md` |
 | 官网玩家入口（Web 地址、按钮） | `OrzMC/OrzMCSite` |
@@ -81,6 +82,8 @@ Wasm-GC），并在传输层把 TCP 换成 WebSocket**：
 - **一键进服已解决**：官方站支持 `/play?joinServer=<wss>&version=<ver>&launch=1` 深链
   （`launch=1` 自动启动，免点「启动游戏」；2026-11-22 实测），`site` 的「在浏览器中玩」已改为直接进服；
   无需自托管客户端，也不影响「不替换 EaglerXServer」。
+- **兜底**：已准备自托管 26.3 客户端的方案（patch `joinServer`、Caddy 托管、site 次级入口），
+  仅在官方站不可用时启用；不是主路径，且 ARR/EULA 风险高于只链官方。
 - **已定**：实现语言 **Kotlin 2.4.x**（JVM 21+，Netty + 协程；2026-11-22）。
 - **合规口径**：Eaglercraft **不符合 Mojang EULA**；本仓只降低自己的暴露面（不分发/不修改客户端、不商业化、只连自有服务器），**不宣称合规**。
 - **主要未决**：与 EaglerXServer 的关系（D2）、是否自建客户端页面（D3，许可证风险）、
