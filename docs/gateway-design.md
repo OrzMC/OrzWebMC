@@ -132,22 +132,29 @@
 ### 3.1 拓扑（推荐：网关 + Velocity）
 
 ```text
-玩家浏览器 (Eaglercraft 1.8.8 / 12.2 / 26.x)
-   │  wss://play.example.com/s/<route>   （TLS + WS）
-   ▼
-Caddy / nginx（现有反代）
-   │  ws://gateway:8081   + X-Real-IP（+ 共享密钥头）
-   ▼
-orzmc-web-gateway（本仓）
-   │  TCP + PROXY v2（真实 IP）  + 普通 MC 登录（offline）
-   ▼
-Velocity（online-mode=false，[advanced] proxy-protocol=true，modern forwarding）
-   ├── Paper 26.x（online-mode=false）
-   └── Folia 26.x（online-mode=false）
+Java 玩家 ──TCP──▶ HAProxy :25565 ──PROXY v2──▶┐
+                                              ├─▶ Velocity 127.0.0.1:25577
+玩家浏览器 (Eaglercraft 1.8.8 / 12.2 / 26.x)     │   （offline，modern forwarding）
+   │  wss://play.example.com/s/<route>          │
+   ▼                                            │
+Caddy / nginx（现有反代）                        │
+   │  ws://gateway:8081 + X-Real-IP（+ 密钥头）  │
+   ▼                                            │
+orzmc-web-gateway（本仓）                        │
+   │  TCP + PROXY v2（真实 IP）+ 离线 MC 登录    │
+   └────────────────────────────────────────────┘
+                                                ├── Paper 26.x（online-mode=false）
+                                                └── Folia 26.x（online-mode=false）
 ```
 
+> **HAProxy 不是可选项（生产）**：Velocity 的 `[advanced] proxy-protocol` 是**全局**开关；
+> 打开后所有入站连接都必须先发 PROXY 头，Java 玩家直连会失败。所以 Java 走 HAProxy
+> （`send-proxy-v2`），Web 走网关（自己发 PROXY），两者都到 Velocity 的环回端口。
+> 不想引入 HAProxy 时用「B-lite」：不开 PROXY，Web 玩家只显示网关 IP（见 `deployment.md` §1.2）。
+
 > Velocity 侧三个必须知道的默认值（`velocity.toml`）：
-> - `[advanced] proxy-protocol = true`：接受网关的 PROXY v2 头（真实 IP）。
+> - `[advanced] proxy-protocol = true`：接受 HAProxy/网关的 PROXY v2 头（真实 IP）；
+>   全局生效，Java 必须经 HAProxy（见上）。
 > - `[advanced] login-ratelimit = 3000`（ms）：**同一来源 IP** 两次登录的最小间隔。
 >   不开 PROXY 时所有玩家都来自网关 IP，会被这个值限流；开了 PROXY 才是每玩家独立。
 > - `[advanced] connection-timeout = 5000` / `read-timeout = 30000`：慢网络/大区块场景
@@ -336,7 +343,11 @@ name ──▶ offline UUID = UUIDv3("OfflinePlayer:" + name)
 | 浏览器 → Caddy | Caddy 自带真实 IP |
 | Caddy → 网关 | `X-Real-IP`（+ 共享密钥头，拒绝直连） |
 | 网关 → Velocity | **PROXY protocol v2**（Velocity `proxy-protocol=true`） |
+| Java → Velocity | **HAProxy + `send-proxy-v2`**（同一个 listener） |
 | Velocity → 后端 | Velocity modern forwarding 自带 IP |
+
+> ⚠️ `proxy-protocol` 是 Velocity 的**全局**开关：开则所有入站都必须带 PROXY 头，
+> Java 直连会失败。生产用 HAProxy 统一接 Java；P1 验证可先用 B-lite（不开 PROXY）。
 
 > 若直连 Paper：Paper 对 PROXY 协议的支持随版本/插件而变，P1 先记录网关 IP，
 > P2 用服内插件（OrzMCPlugin）读取网关附带的登录期/PLAY 期标记补真实 IP。

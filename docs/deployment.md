@@ -32,15 +32,25 @@
 ### 1.2 拓扑 B：推荐（生产 / 多后端 / Folia）
 
 ```text
-浏览器 ──wss──▶ Caddy ──ws+X-Real-IP──▶ gateway ──TCP+PROXY v2──▶ Velocity ──modern forwarding──▶ Paper/Folia
+Java 玩家 ──TCP──▶ HAProxy :25565 ──PROXY v2──▶┐
+                                              ├─▶ Velocity 127.0.0.1:25577 ──modern forwarding──▶ Paper/Folia
+浏览器 ──wss──▶ Caddy ──ws──▶ gateway ──PROXY v2─┘
 ```
 
-- 优点：真实 IP、多后端、`/server` 切服、已登录去重、Folia 可用；后端零 Eagler 插件。
-- 代价：多一个 Velocity 与一层配置；Velocity 必须开 `proxy-protocol`。
-- 何时用：正式服、多实例、需要真实 IP / 白名单按 IP 限流。
+- 优点：Java/Web 都拿到**真实 IP**；多后端、`/server` 切服、已登录去重、Folia 可用；后端零 Eagler 插件。
+- 代价：比 A 多一个 Velocity + 一个 HAProxy；Velocity 只监听环回。
+- 何时用：正式服、多实例、需要真实 IP / 按 IP 限流。
 
-> **PROXY v2 的方向别搞反**：是 **gateway → Velocity** 的 TCP 连接前发 PROXY 头；
-> **不是** Caddy → gateway 的方向（那一段用 `X-Real-IP` + 共享密钥头）。
+> **为什么必须有 HAProxy（或等价的 TCP 入口）**：Velocity 的 `proxy-protocol` 是**全局**的
+> （`[advanced] proxy-protocol = true`）。一旦打开，**所有**连到该 listener 的连接都必须先发
+> PROXY 头；Java 玩家不会发，直连就会失败。所以只有两条路：
+>
+> 1. **HAProxy 统一接 Java**（本拓扑）：Java → HAProxy（发 PROXY）→ Velocity；Web → gateway（发 PROXY）→ Velocity；
+> 2. **不开 PROXY**（拓扑 B-lite）：gateway 普通连接 Velocity，Web 玩家在 Velocity 侧只看到 gateway IP，
+>    `login-ratelimit` 要设 0，IP 日志/按 IP 限流失真——只适合 P1 验证。
+>
+> **PROXY v2 的方向**：HAProxy/gateway → Velocity 的 TCP 连接前发 PROXY 头；
+> Caddy → gateway 那一段用 `X-Real-IP` + 共享密钥头，不是 PROXY。
 
 ---
 
@@ -50,14 +60,15 @@
 |---|---|---|---|
 | Caddy | 443（宿主按现网映射，如 18443） | 公网 | TLS + WS 透传 + `X-Real-IP` |
 | gateway | `127.0.0.1:8081` | **不发布** | 只给 Caddy；校验共享密钥 |
-| Velocity | `0.0.0.0:25565` | 公网 | Java 玩家入口；开 `proxy-protocol` |
+| HAProxy | `0.0.0.0:25565` | 公网 | Java 入口；只做 TCP + `send-proxy-v2` |
+| Velocity | `127.0.0.1:25577` | **不发布** | 只接受 HAProxy/gateway 的 PROXY 连接 |
 | Paper/Folia | 内部端口（如 25566/25567） | 不发布 | 只给 Velocity |
 | Geyser（可选） | 19132 TCP/UDP | 公网 | 在 Velocity 侧；与本文无关 |
 
 防火墙口径：
 
-- 公网只开：`443/tcp`（Caddy）、`25565/tcp`（Java/Velocity）、基岩需要的 UDP/TCP。
-- **不要**把 gateway 的 8081、后端实例端口发布到公网。
+- 公网只开：`443/tcp`（Caddy）、`25565/tcp`（HAProxy/Java）、基岩需要的 UDP/TCP。
+- **不要**把 gateway 的 8081、Velocity 的 25577、后端实例端口发布到公网。
 
 ---
 
@@ -67,7 +78,8 @@
 |---|---|
 | JDK | 21+（网关与 Velocity 都用） |
 | Caddy | 已能给域名签发证书（现网用 DNS-01；家宽需 `resolvers` + 较长 `propagation_timeout`） |
-| Velocity | 4.x；`online-mode=false`；`player-info-forwarding-mode=modern` |
+| Velocity | 4.x；`online-mode=false`；`player-info-forwarding-mode=modern`；只监听环回 |
+| HAProxy（拓扑 B） | 2.x；TCP 模式；`send-proxy-v2` |
 | Paper/Folia | `online-mode=false`；白名单 + 登录插件（LoginSecurity） |
 | DNS | 给 Web 入口单独子域，如 `play.example.com`（不要复用面板/EasyBot 的 Host） |
 | ViaVersion | 后端不是客户端同版本时必装（否则只能同版本连） |
@@ -109,7 +121,7 @@ proxies:
 `velocity.toml` 关键项：
 
 ```toml
-bind = "0.0.0.0:25565"
+bind = "127.0.0.1:25577"      # 只给 HAProxy/gateway，不直接暴露
 online-mode = false
 player-info-forwarding-mode = "modern"
 forwarding-secret-file = "forwarding.secret"
@@ -120,16 +132,44 @@ lobby = "127.0.0.1:25566"
 try = ["lobby"]
 
 [advanced]
-proxy-protocol = true       # 接受 gateway 的 PROXY v2（真实 IP）
-login-ratelimit = 3000      # 同一来源 IP 的登录间隔；开 PROXY 后按玩家真实 IP 计
+proxy-protocol = true       # 所有入站连接都必须带 PROXY 头（HAProxy/gateway）
+login-ratelimit = 3000      # 开 PROXY 后按玩家真实 IP 计
 connection-timeout = 5000
 read-timeout = 120000       # 大区块/慢网络；默认 30s 偏紧
 ```
 
 - `forwarding.secret` 与后端 `paper-global.yml` 的 `secret` 一致。
-- **`proxy-protocol = true` 后，所有连到 25565 的连接都必须带 PROXY 头**；
-  Java 玩家直连会失败——所以：要么只让 gateway 连 25565（推荐），要么给 Java 单独监听/端口。
-- 启动后自检：Velocity 日志 `Listening on /0.0.0.0:25565`，Java 客户端能进 lobby。
+- **不要**把 25577 发布到公网；Java 玩家走 HAProxy，Web 玩家走 gateway。
+- 启动后自检：日志 `Listening on /127.0.0.1:25577`；Java 经 HAProxy 能进 lobby。
+
+### 4.2.1 HAProxy（Java 入口）
+
+`/etc/haproxy/haproxy.cfg` 片段：
+
+```haproxy
+frontend mc_java
+    bind :25565
+    mode tcp
+    default_backend velocity
+
+backend velocity
+    mode tcp
+    server velocity 127.0.0.1:25577 send-proxy-v2
+```
+
+```bash
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl reload haproxy
+```
+
+要点：
+
+- HAProxy 只做 TCP 转发 + 在发往 Velocity 的连接前加 **PROXY v2**（`send-proxy-v2`），
+  不解析 Minecraft 协议，开销可以忽略。
+- 它看到的是 Java 玩家真实 IP，所以 Velocity 侧拿到的也是真实 IP。
+- Gateway 直接连 `127.0.0.1:25577` 并自己发 PROXY 头，不经过 HAProxy。
+- 若不想引入 HAProxy：用拓扑 B-lite（不启 PROXY）先验证，或把 gateway 同时做 Java TCP 入口
+  （不推荐：Java 的可用性会被网关拖累）。
 
 ### 4.3 网关
 
@@ -177,7 +217,7 @@ routes:
   - match: { host: "play.example.com" }
     upstream:
       type: velocity
-      addr: "127.0.0.1:25565"
+      addr: "127.0.0.1:25577"
       proxy_protocol: true
       handshake_host: "play.example.com"
     display_name: "大厅"
@@ -267,7 +307,7 @@ caddy reload --config /etc/caddy/Caddyfile
 ### 4.5 DNS 与防火墙
 
 1. `play.example.com` A/AAAA 指向入口（或 Cloudflare 代理；注意 WS 要允许）。
-2. 路由器只转发 443（宿主映射）、25565 等必要端口；**不转发 8081**。
+2. 路由器只转发 443（宿主映射）、25565（HAProxy）等必要端口；**不转发 8081/25577**。
 3. 若用云防火墙，放行 443/25565；后端端口不开放。
 
 ---
@@ -276,6 +316,7 @@ caddy reload --config /etc/caddy/Caddyfile
 
 | 客户端 | 地址 | 说明 |
 |---|---|---|
+| Java 玩家 | `<域名或 IP>:25565` | 走 HAProxy；与改造前一致（端口不变） |
 | Eaglercraft 26.x | `wss://play.example.com/` | 只认 wss；官方页直连粘贴 |
 | Eaglercraft 1.8.8 | `wss://play.example.com/` | 页面是 https 时自动 wss |
 | 路径路由 | `wss://play.example.com/s/survival` | 若配置了 path 路由 |
@@ -287,18 +328,20 @@ caddy reload --config /etc/caddy/Caddyfile
 
 ## 6. 上线顺序（照这个顺序排障）
 
-1. **后端**：Paper/Folia 启动、`Done`，Java 离线客户端能进。
-2. **Velocity**（若用）：Java 客户端能进 lobby，日志有 forwarding。
-3. **网关本地**：`curl -sS http://127.0.0.1:9101/healthz`；日志显示监听 8081。
-4. **网关直连探针**（绕过 Caddy，仅本机）：
+1. **后端**：Paper/Folia 启动、`Done`，Java 离线客户端能进（直连后端端口）。
+2. **Velocity**：`bind=127.0.0.1:25577`，启动日志 `Listening`。
+3. **HAProxy**：`25565 → 127.0.0.1:25577 send-proxy-v2`；Java 客户端从 25565 能进 lobby，
+   Velocity 日志里是玩家真实 IP。
+4. **网关本地**：`curl -sS http://127.0.0.1:9101/healthz`；日志显示监听 8081。
+5. **网关直连探针**（绕过 Caddy，仅本机）：
    `python3 deploy/tests/eaglercraft_probe.py --host 127.0.0.1 --port 8081 --real-ip 127.0.0.1`
    （P1 会新增共享密钥头参数；直连必须带密钥与真实 IP，否则网关按设计拒绝。）
-5. **Caddy**：`caddy reload`；外部探针：
+6. **Caddy**：`caddy reload`；外部探针：
    `python3 deploy/tests/eaglercraft_probe.py --host play.example.com --port 443 --tls`
-6. **浏览器**：1.8.8 与 26.x 各进一次；移动、聊天、`/tp`。
-7. **身份**：白名单 + `/register`/`/login`；同名双开应被代理拒绝。
-8. **真实 IP**：Velocity/后端日志里应是玩家公网 IP，不是网关/内网 IP。
-9. **灰度**：先 1–3 个白名单玩家，观察 24 h，再放开。
+7. **浏览器**：1.8.8 与 26.x 各进一次；移动、聊天、`/tp`。
+8. **身份**：白名单 + `/register`/`/login`；同名双开应被代理拒绝。
+9. **真实 IP**：Velocity/后端日志里应是玩家公网 IP，不是网关/HAProxy 的内网 IP。
+10. **灰度**：先 1–3 个白名单玩家，观察 24 h，再放开。
 
 ---
 
@@ -326,9 +369,11 @@ caddy reload --config /etc/caddy/Caddyfile
 | Caddy 502 | 网关没起/端口错/只监听 127.0.0.1 但 Caddy 在容器 | 查 `journalctl`、`ss -lntp`；容器网络改 host 或服务名 |
 | `Connection closed during Eagler server version` | Caddy 缓冲/未透传 Upgrade；上游连到了非网关端口 | `flush_interval -1`；确认 upstream 8081 |
 | 网关直接关连接 | 缺 `X-Real-IP` 或共享密钥不匹配 | 查 Caddy `header_up` 与环境变量 |
-| Velocity 报 PROXY 错误 | gateway `proxy_protocol` 与 Velocity `proxy-protocol` 不一致 | 两边同时开/关，重启 |
+| Velocity 报 PROXY 错误 / 直接断 | gateway/HAProxy 是否发 PROXY 与 Velocity `proxy-protocol` 不一致 | 三处保持一致：Velocity 开、HAProxy `send-proxy-v2`、gateway `proxy_protocol: true` |
+| Java 连 25565 进不去，Web 正常 | HAProxy 没起 / 25565 没指向 HAProxy / Velocity 只监听 127.0.0.1 | 查 HAProxy 监听与 `send-proxy-v2`；Java 不要直连 25577 |
+| Java 玩家 IP 全是网关/内网 | HAProxy 后端漏了 `send-proxy-v2`，或 Velocity 关了 `proxy-protocol` | 补上并 reload |
 | `Your client does not support online mode` | Velocity/Paper `online-mode=true` | 整链改 false |
-| 所有玩家 IP 相同 + 登录被限流 | 没发 PROXY 头 / Velocity 没开 `proxy-protocol` | 打开并重启；`login-ratelimit` 按真实 IP 生效 |
+| 所有 Web 玩家 IP 相同 + 登录被限流 | 拓扑 B-lite（没开 PROXY）或 gateway 没发 PROXY | 上 HAProxy + PROXY；临时把 `login-ratelimit=0` |
 | 版本不匹配被踢 | 客户端协议 ≠ 后端，且没装 ViaVersion | 装 ViaVersion/对齐版本 |
 | 玩几分钟 1006 | 客户端渲染/后台节流/网络代理；不一定是部署问题 | 客户端硬件加速、前台、关 TUN；服务端 `read-timeout` |
 | 没有皮肤/语音/MOTD | P1 网关未实现这些扩展 | 预期；见 `gateway-design` §2.1 / P2 |
@@ -341,8 +386,11 @@ caddy reload --config /etc/caddy/Caddyfile
 - 现网：`ENABLE_EAGLER=true` → Velocity 装 EaglerXServer，Caddy 反代到 `orzmc-velocity:25565`。
 - 新方案：Caddy 新增 `play.example.com` → 网关 8081；旧域名/旧入口保持不动。
 - 灰度：按域名或按玩家（不同子域）分流；观察指标与日志。
-- 回滚：把 Caddy 的 `play.example.com` 上游切回 `orzmc-velocity:25565`（EaglerXServer），
-  或直接停网关；后端/Velocity 配置不需要回滚（因为网关只是客户端）。
+- **只回滚 Web 网关**：停网关，Caddy 的 `play.example.com` 切回 `orzmc-velocity:25565`
+  （EaglerXServer）；HAProxy/Velocity 保持不动，Java 玩家不受影响。
+- **整体回退到改造前**：停网关 → 移除 Caddy 的 Web 站点块 → 停 HAProxy →
+  Velocity 改回 `bind=0.0.0.0:25565`、`proxy-protocol=false` → 装回 EaglerXServer →
+  验证 Java 直连 + 旧 Web 入口。
 
 ---
 
@@ -351,8 +399,10 @@ caddy reload --config /etc/caddy/Caddyfile
 - 只支持 Eagler 握手 **v3 + v5**；1.5.2 不支持。
 - **皮肤/披风、语音、MOTD 查询、通知/WebView、后端 RPC 未实现**（P2+）。
 - **自定义 UUID 未实现**：Web 玩家是离线 UUID；如要绑定已有 Java 账号，需加 Velocity/Paper 小插件。
+- **真实 IP 依赖拓扑 B 的 HAProxy**：若走 B-lite（不开 PROXY），Web 玩家在 Velocity/后端只显示
+  gateway IP，需把 `login-ratelimit` 设为 0，且 IP 封禁/日志会失真。
 - 配置键名是草案，P1 实现时可能微调；以 `webmc` 发布说明为准。
 - 客户端本体不分发；玩家使用官方页/自备客户端（合规边界见 `gateway-design` §17）。
 
-> 一句话：**P1 的部署目标 =「Caddy → 网关 → Velocity → Paper/Folia」跑通 1.8.8 与 26.x，
-> 零后端 Eagler 插件；皮肤/语音/MOTD/UUID 在后续阶段补。**
+> 一句话：**P1 的部署目标 = Web（Caddy → 网关 → Velocity）与 Java（HAProxy → Velocity）
+> 同时跑通 1.8.8 与 26.x，后端零 Eagler 插件；皮肤/语音/MOTD/UUID 在后续阶段补。**
