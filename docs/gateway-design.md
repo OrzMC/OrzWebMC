@@ -18,13 +18,13 @@
 | # | 需求 | 优先级 |
 |---:|---|---|
 | F1 | 浏览器（Eaglercraft 1.8.8 / 1.12.2 / 26.x）进服：进世界、移动、聊天、方块交互 | P1 |
-| F2 | 一个网关接多个后端（按域名/路径路由） | P1 |
-| F3 | 对接现有 Velocity 组网（网关作为普通客户端），后端零插件 | P1 |
-| F4 | 真实客户端 IP 透传（反代 → 网关 → Velocity） | P1 |
+| F2 | 一个网关接多个后端（按域名/路径路由） | P2（起步不需要） |
+| F3 | 对接现有 Velocity 组网（网关作为普通客户端），后端零插件 | P2（起步不需要） |
+| F4 | 真实客户端 IP 透传（反代 → 网关 → Velocity） | P3（需 HAProxy） |
 | F5 | 白名单/令牌/登录口令三层收敛身份 | P1（令牌 P2） |
 | F6 | 服务器列表 MOTD 查询 | P2 |
 | F7 | 皮肤/披风中继 | P2 |
-| F8 | 指标、健康检查、结构化日志、优雅重启 | P1 |
+| F8 | 健康检查、结构化日志、优雅重启（指标 P2） | P1 |
 | F9 | 兼容 Folia / 多实例 / Geyser 共存（在代理层解决） | P2（验证） |
 | F10 | 语音 / WebView / 通知等 Eagler 扩展 | P3+（按需） |
 
@@ -517,18 +517,22 @@ java -Xms256m -Xmx512m -jar build/libs/orzmc-web-gateway-all.jar --config /etc/o
 - 产出：`eaglercraft-internals.md`、`protocol-spec.md`、本文件、`references.md`。
 - 退出标准：能回答「协议是什么、要做什么、风险在哪」，并有源码/实测证据。
 
-### P1 最小可用（建议 2–3 个迭代）
+### P1 最小可用（**S1：单 Paper + 单一代客户端**，建议 2–3 个迭代）
 
-1. Kotlin 2.4.x 骨架（Gradle 9 + Netty + 协程）+ 配置 + 日志/指标 + 反代鉴权。
-2. Eagler v3 握手 + MC 登录（47）+ 压缩 + PLAY 中继 → 直连 Paper 1.8.8/26.x。
-3. 黄金向量 + 假客户端/假后端组件测试。
-4. 真机 1.8.8 进服（先不做皮肤/MOTD）。
-- 退出标准：§12.2 前 3 条 + 真机进服。
+> 目标是「先能用、运维最轻」，不是一次性做全。Velocity/HAProxy/PROXY 全部后移。
+
+1. Kotlin 2.4.x 骨架（Gradle 9 + Netty + 协程）+ 单文件配置 + 结构化日志 + `/healthz`。
+2. **只选一代客户端**：26.3/v5 **或** 1.8.8/v3（不要同时做；建议先 26.3，因为现网就是它）。
+3. 直连 Paper（offline）：Eagler 握手 + MC 登录 + 压缩 + PLAY 中继；**不含 Velocity/HAProxy/PROXY**。
+4. 黄金向量 + 假客户端/假后端组件测试。
+5. 真机进服（不做皮肤/MOTD/语音/令牌/多路由/Prometheus）。
+6. 退出标准：单服进世界、移动、聊天、方块交互、断线重连；白名单 + LoginSecurity 生效。
 
 ### P2 生产化
 
 1. v5/26.x 完整支持（按 §9 清单补齐；LoginAck 去重、caps=0 验证）。
-2. Velocity 接入（PROXY v2 + 真实 IP）+ 多路由 + 配置校验。
+2. Velocity 接入（B-lite：不开 PROXY，接受 Web 玩家显示网关 IP）+ 多路由 + 配置校验；
+   需要真实 IP 时再加 HAProxy/PROXY（P3）。
 3. MOTD 查询（Server List Ping 映射）。
 4. 令牌身份（与站点对接）+ 限流/熔断。
 5. 压测 + 指标面板 + 部署脚本 + 回滚演练。
