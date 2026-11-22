@@ -154,6 +154,6 @@ data/versions/
 docker build -t orzmc-webmc:dev .
 ```
 
-- 语言/构建：Kotlin 2.4.21、Gradle 9.9.0、JDK 17（镜像运行时 JDK 21）。
+- 语言/构建：Kotlin 2.4.21、Gradle 9.9.0、JDK 17（镜像运行时 JDK 25 LTS，兼容 21+）。
 - 客户端文件**不参与**测试与构建；测试只用几十字节的假 HTML。
 - 代码许可证：Apache-2.0（见 `LICENSE`）；客户端许可证归其作者（ARR）。

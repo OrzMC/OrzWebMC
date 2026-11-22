@@ -119,7 +119,7 @@ WebMC.reload()
 ## 5. 运行（Docker，推荐）
 
 > 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.2`（以及 `latest`），
-> digest 见 GitHub Packages / Release 记录。
+> digest `sha256:ef0fb1d7dceab28c153f067b01ca3d403bfbd3486123a12410bc2dc822dc4fd7`。
 > GHCR 包已设为 **public**，可直接 `docker pull`（无需登录）；也可用本仓库
 > `docker-compose.yml` 的 `build: .` 本地构建。
 
