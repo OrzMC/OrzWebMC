@@ -3,10 +3,10 @@
 > **定位**：把「浏览器进 Java 服」做成**一个可自托管的通用网关服务**，而不是每台服都装
 > 一个 NMS 反射插件。本文是决策 + 架构 + 里程碑；字节级契约在 [protocol-spec](protocol-spec.md)。
 >
-> **状态**：草案（2026-11-22）。**D1 已定：Java/Kotlin**；D2–D4 待维护者确认（阻塞实现），D5–D6 影响排期。
+> **状态**：草案（2026-11-22）。**D1 已定：Kotlin 2.4.x（JVM 21+）**；D2–D4 待维护者确认（阻塞实现），D5–D6 影响排期。
 > **前置阅读**：[eaglercraft-internals](eaglercraft-internals.md)（原理与证据）。
 >
-> **一句话方案**：Java/Kotlin 服务（Netty）`orzmc-web-gateway`，终结 `wss`，实现 Eagler 握手 v3/v5，
+> **一句话方案**：Kotlin 2.x 服务（Netty）`orzmc-web-gateway`，终结 `wss`，实现 Eagler 握手 v3/v5，
 > 以**普通离线 MC 客户端**身份连 Paper 或 Velocity，PLAY 阶段只做「帧 + 压缩」中继。
 
 ---
@@ -306,44 +306,48 @@ name ──▶ offline UUID = UUIDv3("OfflinePlayer:" + name)
 
 ## 8. 技术选型
 
-### 8.1 已定：Java / Kotlin（JVM 21+）
+### 8.1 已定：Kotlin 2.4.x（JVM 21+）
 
-维护者 2026-11-22 决定：实现语言用 **Java / Kotlin**，与 Minecraft（Paper/Velocity）生态一致。
-协议/状态机/拓扑与语言无关；`protocol-spec` 不变。
+维护者 2026-11-22 决定：实现语言用**现代 Kotlin（K2）**，与 `backup/java` 的技术栈同代；
+JVM 21 工具链（可运行在 25，跟 MC 26.x 同代）。协议/状态机/拓扑与语言无关；`protocol-spec` 不变。
 
-| 项 | 建议 | 说明 |
+| 项 | 选型 | 说明 |
 |---|---|---|
-| JDK | **21 LTS 起** | virtual threads 可用；想跟 MC 26.x 的 Java 25 也可直接上 25 |
-| 语言 | **Kotlin 2.x** 或 **Java 21**（子决策） | Kotlin 的 sealed/data class 适合握手/状态机；Java 21 的 records/sealed/switch 也够用 |
-| 构建 | Gradle（Kotlin DSL）+ Shadow | 产出 `orzmc-web-gateway-all.jar`，`java -jar` 启动 |
-| 网络 | **Netty 4.1**（HTTP/WS/压缩/ByteBuf） | 与 EaglerXServer 同栈；`permessage-deflate` 现成；零拷贝/池化 |
-| 压缩 | Netty `ZlibCodecFactory` / `java.util.zip` | 后端链路 zlib；WS 扩展由 Netty 处理 |
-| 配置 | Jackson（YAML/TOML） | 或 NightConfig；启动时校验 |
-| 日志/指标 | SLF4J + Logback；Micrometer 或手写 `/metrics` | 先输出 Prometheus 文本格式即可 |
-| 测试 | JUnit 5 + Netty `EmbeddedChannel` | 编解码黄金向量；假客户端/假后端做组件测试 |
+| 语言 | **Kotlin 2.4.x**（K2） | sealed interface + data class 表达握手帧/状态机；value class 包 `VarInt`/UUID；explicit API |
+| JVM | **toolchain 21**（运行 21/25） | Gradle `jvmToolchain(21)`；`-Xjdk-release=21`；不依赖 preview |
+| 构建 | **Gradle 9.x + Kotlin DSL + version catalog** | `gradle/libs.versions.toml`；`com.gradleup.shadow` 打 fat jar |
+| 网络 | **Netty 4.2.x**（或 4.1 LTS） | HTTP/WS/`permessage-deflate`/`ByteBuf` 池化；与 EaglerXServer 同栈思路 |
+| 并发 | **kotlinx-coroutines** + `Flow`/`Channel` | 会话状态机/背压用协程；Netty `ChannelFuture` 用 `await()`（jdk8 桥） |
+| 序列化 | **kotlinx-serialization-json**；YAML 用 **kaml** | 配置/指标/JSON 查询；避免反射式映射 |
+| 日志/指标 | SLF4J + Logback；Micrometer | 先输出 Prometheus 文本；连接级 MDC（conn_id/route/name） |
+| 测试 | JUnit 5 + **Kotest**（可选）+ `EmbeddedChannel` | 黄金向量 round-trip；假客户端/假后端组件测试；`mockk` 按需 |
+| 质量 | **detekt + ktlint** | CI 与本地同门禁（与 `backup/java` 习惯一致） |
 
 **部署形态**：
 
 ```bash
-java -Xms256m -Xmx512m -jar orzmc-web-gateway-all.jar --config /etc/orzmc/web-gateway.yaml
+./gradlew shadowJar
+java -Xms256m -Xmx512m -jar build/libs/orzmc-web-gateway-all.jar --config /etc/orzmc/web-gateway.yaml
 ```
 
 - Docker 基础镜像 `eclipse-temurin:21-jre`；systemd 同理。
-- 可选 `jlink` 自定义运行时（~50 MB）或 GraalVM native-image（P3 再评估，Netty 反射配置有成本）。
-- 不再追求 Go 式「单静态二进制」：单实例常驻服务，JVM 启动/内存成本可接受。
+- Shadow jar 已含 Kotlin 运行时，无需额外装 Kotlin。
+- 可选 `jlink` 自定义运行时（~50 MB）；GraalVM native-image 对 Kotlin+Netty 成本高，P3 再评估。
+- 不追求 Go 式「单静态二进制」：单实例常驻服务，JVM 启动/内存成本可接受。
 
 ### 8.2 与其它语言的对比（记录决策依据）
 
 | 语言 | 优点 | 缺点 | 结论 |
 |---|---|---|---|
-| **Java/Kotlin** | 与 MC/Paper/Velocity 同生态；Netty 成熟；维护者熟悉 | JVM 基线内存/启动成本；打包比 Go 大 | **已定** |
-| Go | 单静态二进制、部署简单 | 与 MC 生态远；协议/网络库要另选 | 备选（本次不选） |
+| **Kotlin 2.4.x** | 与 MC/Paper/Velocity 同生态；K2 + 协程 + 密封类型适合协议；Netty 成熟；与 `backup/java` 同栈 | JVM 基线内存/启动成本；打包比 Go 大 | **已定** |
+| Java 21 | 同生态、工具链最保守 | 样板代码多；状态机表达不如 sealed/data | 兜底，不作主语言 |
+| Go | 单静态二进制、部署简单 | 与 MC 生态远；协议/网络库要另选 | 备选（不选） |
 | Rust | 性能/内存最优 | 开发慢、迭代成本高 | 不选 |
 | Node/TS | 原型最快（现有 JS 代理） | 每连接内存/GC、压缩 CPU | 只做原型/对照 |
 
 ### 8.3 依赖最小化
 
-- 只引入：Netty、zlib（Netty 自带）、YAML/TOML、日志、指标。
+- 只引入：Netty、kotlinx-coroutines、kotlinx-serialization、YAML、日志、指标。
 - **不引入 Minecraft 协议库**（避免被包 id/版本绑架）；登录包手写（字段少且稳定）。
 - 不把 EaglerXServer/Velocity 作为编译依赖（只参考协议，不复制代码；其许可为 ARR）。
 
@@ -442,7 +446,7 @@ java -Xms256m -Xmx512m -jar orzmc-web-gateway-all.jar --config /etc/orzmc/web-ga
 
 ### P1 最小可用（建议 2–3 个迭代）
 
-1. Java/Kotlin 骨架（Gradle + Netty）+ 配置 + 日志/指标 + 反代鉴权。
+1. Kotlin 2.4.x 骨架（Gradle 9 + Netty + 协程）+ 配置 + 日志/指标 + 反代鉴权。
 2. Eagler v3 握手 + MC 登录（47）+ 压缩 + PLAY 中继 → 直连 Paper 1.8.8/26.x。
 3. 黄金向量 + 假客户端/假后端组件测试。
 4. 真机 1.8.8 进服（先不做皮肤/MOTD）。
@@ -489,7 +493,7 @@ java -Xms256m -Xmx512m -jar orzmc-web-gateway-all.jar --config /etc/orzmc/web-ga
 
 | # | 决策 | 含义 / 影响 | 选项 | 建议 |
 |---:|---|---|---|---|
-| D1 | 实现语言 / 运行时 | 决定代码结构、构建与部署 | Java / Kotlin（JVM 21+） | **已定：Java/Kotlin（2026-11-22）**；子决策：Kotlin 2 + Gradle 或 Java 21 |
+| D1 | 实现语言 / 运行时 | 决定代码结构、构建与部署 | Kotlin 2.4.x（JVM 21+） | **已定：Kotlin 2.4.x + Gradle 9 + Netty（2026-11-22）** |
 | D2 | 与 EaglerXServer 的关系 | 网关上线后现网桥接层是否保留；影响回滚、功能对等（皮肤/语音/MOTD）、运维复杂度 | 替换 / 并存灰度 / 仅实验 | **并存**：网关新端口/域名，灰度后替换 |
 | D3 | 客户端分发形态 | 谁提供浏览器页面/客户端；影响「一键进服」体验、许可证与带宽 | 不分发（官方页+粘地址）/ 自建页面（预置 `servers`）/ 只链官方 | **先不分发**；页面等许可证结论（ARR/EULA） |
 | D4 | 身份门槛（P2） | 凭什么证明「你是这个名字」；影响防冒名、登录体验、与站点/插件集成 | 仅白名单+口令 / 站点令牌 / 第三方 OAuth | **站点令牌**（与 `site` 登录打通），保留匿名模式 |
@@ -512,3 +516,51 @@ java -Xms256m -Xmx512m -jar orzmc-web-gateway-all.jar --config /etc/orzmc/web-ga
 
 **回滚路径**：网关是独立进程；停掉它、把 Caddy 上游切回 `orzmc-velocity:25565` 即回到
 EaglerXServer 方案。两种方案可以同时监听不同域名，按玩家灰度。
+
+---
+
+## 17. 合规边界：降低暴露面 ≠ 取得 EULA 合规
+
+> **不是法律意见**；以 Mojang EULA 与 Microsoft 服务条款原文为准。
+> 结论先说：**Eaglercraft 端到端并不符合 Mojang EULA**，我们的方案也不宣称合规，
+> 只是把**我们自己的**风险压到最低（不分发客户端、不商业化、只连自有服务器）。
+
+### 17.1 为什么 Eaglercraft 本身不合规
+
+| 争点 | 事实 | 与 EULA 的关系 |
+|---|---|---|
+| **客户端来源** | Eaglercraft 是反编译/改写后的 Minecraft Java 客户端（含游戏代码与资源），编译成 JS/WASM 后**公开分发** | EULA 只授予「使用游戏」的有限许可，**不授予**分发/反编译/修改游戏本体的权利；「允许做 mod」不等于「可以随 mod 附带游戏本体」 |
+| **离线身份** | 客户端不经过 Mojang 账号/会话认证，服务端用离线 UUID | 离线模式是服务端设置，**不等于**可以使用/分发未授权客户端；绕过正常认证另有条款风险 |
+| **公开分发** | 官方站点长期提供单文件客户端下载 | 存在不等于授权；第三方「大家都在用」不构成许可 |
+| **商业化** | 若 Web 入口收费/卖权限 | EULA 对商业化有额外限制，风险显著放大 |
+
+一句话：**问题在客户端的分发/改写，而不在「用 WebSocket 连服」这个技术手段。**
+技术上把 TCP 换成 WS 是中性的；法律上是否允许，取决于你分发的是什么。
+
+### 17.2 我们做了什么 / 没做什么
+
+| 层 | 我们的做法 | 效果 |
+|---|---|---|
+| 客户端 | **不分发、不修改、不内置**；玩家自行打开官方页或自担风险 | 避免直接的「分发游戏本体」风险 |
+| 网关 | 完全自研（Apache-2.0），只做帧/压缩/登录转换，不含游戏代码 | 网关本身是普通网络服务 |
+| 后端 | 只连**我们自己的**服务器；不做「任意服」开放代理 | 不成为公开的规避入口 |
+| 运营 | 不收费、不做公开大规模推广；白名单 + 口令/令牌 | 控制暴露面与滥用 |
+| 文档 | 明确写「不符合 EULA」，不把「能连」说成「合规」 | 避免误导使用者 |
+
+### 17.3 所以「方案符合 EULA」这个说法错在哪
+
+- **把技术可行当成法律允许**：Eaglercraft 能连 Java 服，不代表它被授权。
+- **把「离线模式」当成豁免**：`online-mode=false` 只是服务器配置，不能为未授权客户端提供合法性。
+- **把「不分发」当成全链合规**：我们不分发只能降低**我们**的风险；玩家使用反编译客户端这件事本身仍然不合规。
+- **把「官方也在做」当成许可**：Mojang 的沉默/未执法不等于授权，且存在被下架的先例风险。
+
+### 17.4 如果未来要公开/商业化
+
+必须先满足至少一条：
+
+1. 取得 Mojang/Microsoft 的**书面许可**（例如官方支持的 Web 客户端形态）；
+2. 或改用**官方客户端**（Java/基岩）提供入口，Web 仅作为「远程画面/串流」等不分发客户端的形态；
+3. 或把服务严格限制在**私有、非商业、小范围**，并接受「随时可能被要求停止」的风险。
+
+> 这就是为什么 `site` 现在只提供 `wss://` 地址 + 打开官方客户端，**不在本站分发客户端本体**；
+> 也是为什么 `README` / 本文档始终写「不符合 EULA」，而不是「符合」。
