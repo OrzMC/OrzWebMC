@@ -3,10 +3,10 @@
 > **定位**：把「浏览器进 Java 服」做成**一个可自托管的通用网关服务**，而不是每台服都装
 > 一个 NMS 反射插件。本文是决策 + 架构 + 里程碑；字节级契约在 [protocol-spec](protocol-spec.md)。
 >
-> **状态**：草案（2026-11-22），等待维护者在 §15 的决策点上确认（D1–D4 阻塞实现，D5–D6 影响排期）。
+> **状态**：草案（2026-11-22）。**D1 已定：Java/Kotlin**；D2–D4 待维护者确认（阻塞实现），D5–D6 影响排期。
 > **前置阅读**：[eaglercraft-internals](eaglercraft-internals.md)（原理与证据）。
 >
-> **一句话方案**：Go 单二进制 `orzmc-web-gateway`，终结 `wss`，实现 Eagler 握手 v3/v5，
+> **一句话方案**：Java/Kotlin 服务（Netty）`orzmc-web-gateway`，终结 `wss`，实现 Eagler 握手 v3/v5，
 > 以**普通离线 MC 客户端**身份连 Paper 或 Velocity，PLAY 阶段只做「帧 + 压缩」中继。
 
 ---
@@ -31,7 +31,7 @@
 ### 1.2 非功能
 
 - **零侵入**：不改 Paper/Spigot/Velocity 的 jar，不依赖 NMS 类名。
-- **单二进制**：无 JVM、无 Node 运行时；`scp` 即部署，systemd/docker 均可。
+- **单进程 / 单 JAR**：`java -jar` 即可运行（systemd/docker）；不依赖外部数据库/中间件。
 - **可观测**：每连接有 id、路由、协商版本、耗时、断开原因。
 - **可回滚**：与现有 EaglerXServer 并存（不同端口/域名），随时切回。
 - **安全默认**：只连配置的上游；默认拒绝未知 Origin/未带真实 IP 的直连。
@@ -306,32 +306,49 @@ name ──▶ offline UUID = UUIDv3("OfflinePlayer:" + name)
 
 ## 8. 技术选型
 
-### 8.1 推荐：Go
+### 8.1 已定：Java / Kotlin（JVM 21+）
 
-| 维度 | 评价 |
-|---|---|
-| 并发模型 | 每连接 goroutine，天然适合双向 pump |
-| WS | `coder/websocket`（支持 permessage-deflate）或 `gorilla/websocket` |
-| zlib | 标准库 `compress/zlib` + `klauspost/compress/flate`（更快） |
-| 部署 | 单静态二进制；交叉编译；容器镜像 <20 MB |
-| 可观测 | `prometheus/client_golang` + `log/slog` |
-| 风险 | 无 GC 停顿问题（小对象多，但可池化） |
+维护者 2026-11-22 决定：实现语言用 **Java / Kotlin**，与 Minecraft（Paper/Velocity）生态一致。
+协议/状态机/拓扑与语言无关；`protocol-spec` 不变。
 
-### 8.2 备选
+| 项 | 建议 | 说明 |
+|---|---|---|
+| JDK | **21 LTS 起** | virtual threads 可用；想跟 MC 26.x 的 Java 25 也可直接上 25 |
+| 语言 | **Kotlin 2.x** 或 **Java 21**（子决策） | Kotlin 的 sealed/data class 适合握手/状态机；Java 21 的 records/sealed/switch 也够用 |
+| 构建 | Gradle（Kotlin DSL）+ Shadow | 产出 `orzmc-web-gateway-all.jar`，`java -jar` 启动 |
+| 网络 | **Netty 4.1**（HTTP/WS/压缩/ByteBuf） | 与 EaglerXServer 同栈；`permessage-deflate` 现成；零拷贝/池化 |
+| 压缩 | Netty `ZlibCodecFactory` / `java.util.zip` | 后端链路 zlib；WS 扩展由 Netty 处理 |
+| 配置 | Jackson（YAML/TOML） | 或 NightConfig；启动时校验 |
+| 日志/指标 | SLF4J + Logback；Micrometer 或手写 `/metrics` | 先输出 Prometheus 文本格式即可 |
+| 测试 | JUnit 5 + Netty `EmbeddedChannel` | 编解码黄金向量；假客户端/假后端做组件测试 |
+
+**部署形态**：
+
+```bash
+java -Xms256m -Xmx512m -jar orzmc-web-gateway-all.jar --config /etc/orzmc/web-gateway.yaml
+```
+
+- Docker 基础镜像 `eclipse-temurin:21-jre`；systemd 同理。
+- 可选 `jlink` 自定义运行时（~50 MB）或 GraalVM native-image（P3 再评估，Netty 反射配置有成本）。
+- 不再追求 Go 式「单静态二进制」：单实例常驻服务，JVM 启动/内存成本可接受。
+
+### 8.2 与其它语言的对比（记录决策依据）
 
 | 语言 | 优点 | 缺点 | 结论 |
 |---|---|---|---|
-| Rust | 性能/内存最优，`tokio-tungstenite` 成熟 | 开发慢、迭代成本高 | 若追求极致可换 |
-| Node/TS | 最快出原型（现有 `EaglercraftX-Vanilla-Proxy` 就是 JS） | 每连接内存/GC、压缩 CPU、长期运维差 | 只做原型/对照 |
-| Java | 与 MC 生态近 | 又要 JVM + Netty，回到 EaglerXServer 的老路 | 不选 |
-
-> 当前 `webmc` 里的 `start.sh`（`npm run build`）是空壳，没有 `package.json`；
-> 选 Go 后应删除或改为 `make`/`go build` 包装。
+| **Java/Kotlin** | 与 MC/Paper/Velocity 同生态；Netty 成熟；维护者熟悉 | JVM 基线内存/启动成本；打包比 Go 大 | **已定** |
+| Go | 单静态二进制、部署简单 | 与 MC 生态远；协议/网络库要另选 | 备选（本次不选） |
+| Rust | 性能/内存最优 | 开发慢、迭代成本高 | 不选 |
+| Node/TS | 原型最快（现有 JS 代理） | 每连接内存/GC、压缩 CPU | 只做原型/对照 |
 
 ### 8.3 依赖最小化
 
-- 只引入：WS 库、zlib、YAML/TOML、Prometheus（可选）。
-- 不引入 Minecraft 协议库（避免被包 id/版本绑架）；登录包手写（字段少且稳定）。
+- 只引入：Netty、zlib（Netty 自带）、YAML/TOML、日志、指标。
+- **不引入 Minecraft 协议库**（避免被包 id/版本绑架）；登录包手写（字段少且稳定）。
+- 不把 EaglerXServer/Velocity 作为编译依赖（只参考协议，不复制代码；其许可为 ARR）。
+
+> 当前 `webmc` 里的 `start.sh`（`npm run build`）是空壳，没有 `package.json`；
+> P1 起骨架时删除或改为 `./gradlew shadowJar` / `java -jar` 包装。
 
 ---
 
@@ -353,7 +370,8 @@ name ──▶ offline UUID = UUIDv3("OfflinePlayer:" + name)
 
 | 指标 | 估算 | 备注 |
 |---|---|---|
-| 每连接内存 | 0.3–1 MiB | zlib 上下文 + 缓冲；50 人 < 50 MiB |
+| 常驻基线 | 100–200 MiB | JVM + Netty；用 `-Xmx` 控上限 |
+| 每连接内存 | 0.3–1 MiB | Netty 缓冲 + zlib；100 人约 +50–100 MiB |
 | CPU / 玩家 | 1–3% 单核 | 取决于包速率与压缩级别；区块爆发时短时更高 |
 | 带宽 | 与 Java 客户端同量级 | WS 头 + deflate 略优于原版 zlib |
 | 首包延迟 | +0（同机） | 反向代理/跨地域另算 |
@@ -424,7 +442,7 @@ name ──▶ offline UUID = UUIDv3("OfflinePlayer:" + name)
 
 ### P1 最小可用（建议 2–3 个迭代）
 
-1. Go 骨架 + 配置 + 日志/指标 + 反代鉴权。
+1. Java/Kotlin 骨架（Gradle + Netty）+ 配置 + 日志/指标 + 反代鉴权。
 2. Eagler v3 握手 + MC 登录（47）+ 压缩 + PLAY 中继 → 直连 Paper 1.8.8/26.x。
 3. 黄金向量 + 假客户端/假后端组件测试。
 4. 真机 1.8.8 进服（先不做皮肤/MOTD）。
@@ -464,18 +482,22 @@ name ──▶ offline UUID = UUIDv3("OfflinePlayer:" + name)
 
 ---
 
-## 15. 待维护者决策（阻塞实现）
+## 15. 待维护者决策
 
-| # | 决策 | 选项 | 建议 |
-|---:|---|---|---|
-| D1 | 实现语言 | Go / Rust / Node | **Go**（单二进制、并发/生态平衡） |
-| D2 | 与 EaglerXServer 的关系 | 替换 / 并存 / 仅实验 | **并存**：网关新端口/域名，灰度后替换 |
-| D3 | 客户端分发 | 不分发 / 自建页面 / 只链官方 | **先不分发**（先做网关 + 官方页 + 复制地址）；页面等许可证结论 |
-| D4 | 身份门槛（P2） | 仅白名单+口令 / 站点令牌 / 第三方 OAuth | **站点令牌**（与 `site` 登录打通），保留匿名模式 |
-| D5 | 皮肤/语音优先级 | P1 / P2 / 不做 | 皮肤 P2，语音 P3+ |
-| D6 | 首个落地服 | 测试服 / 国内服 | **测试服**（复用现网 T1–T12） |
+> 本节 **D1–D6 仅指 webmc 网关**，与父仓库产品统一化的 D1–D14 无关。
+> **D1 已定**；D2–D4 阻塞实现，D5–D6 影响排期。
 
-> 这些决策不改变协议实现，只影响排期与部署；但 D1 决定代码结构，建议先定。
+| # | 决策 | 含义 / 影响 | 选项 | 建议 |
+|---:|---|---|---|---|
+| D1 | 实现语言 / 运行时 | 决定代码结构、构建与部署 | Java / Kotlin（JVM 21+） | **已定：Java/Kotlin（2026-11-22）**；子决策：Kotlin 2 + Gradle 或 Java 21 |
+| D2 | 与 EaglerXServer 的关系 | 网关上线后现网桥接层是否保留；影响回滚、功能对等（皮肤/语音/MOTD）、运维复杂度 | 替换 / 并存灰度 / 仅实验 | **并存**：网关新端口/域名，灰度后替换 |
+| D3 | 客户端分发形态 | 谁提供浏览器页面/客户端；影响「一键进服」体验、许可证与带宽 | 不分发（官方页+粘地址）/ 自建页面（预置 `servers`）/ 只链官方 | **先不分发**；页面等许可证结论（ARR/EULA） |
+| D4 | 身份门槛（P2） | 凭什么证明「你是这个名字」；影响防冒名、登录体验、与站点/插件集成 | 仅白名单+口令 / 站点令牌 / 第三方 OAuth | **站点令牌**（与 `site` 登录打通），保留匿名模式 |
+| D5 | 皮肤/语音优先级 | 玩家观感 vs 工作量 | P1 / P2 / P3 / 不做 | 皮肤 P2，语音 P3+ |
+| D6 | 首个落地服 | 风险与验收成本 | 测试服 / 国内服 | **测试服**（复用现网 T1–T12） |
+
+> D1 已定；D2/D3/D4 建议在 P1 结束前定（D2 影响部署灰度，D3 影响产品入口，D4 影响身份模块）；
+> D5/D6 在 P2 前定即可。
 
 ---
 
