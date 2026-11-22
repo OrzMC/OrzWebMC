@@ -97,6 +97,11 @@ WebMC.reload()
 
 ## 5. 运行（Docker，推荐）
 
+> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.0`（以及 `latest`），
+> digest `sha256:caa2b4cbf28fb76673528a1c264f761f3c232f51cd1f8846801de37cd26e5f2c`。
+> GHCR 包当前是 **private**：在 GitHub Packages 里改为 public，或先 `docker login ghcr.io`；
+> 也可用本仓库 `docker-compose.yml` 的 `build: .` 本地构建。
+
 ```bash
 # 1) 准备数据目录（客户端自己下载，不要入库）
 mkdir -p webmc-data/versions/26.3
