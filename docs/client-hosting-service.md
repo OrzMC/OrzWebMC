@@ -231,7 +231,8 @@ docker build -t orzmc-webmc:dev .
 | `/api/health` / `/api/versions` | `{"status":"ok","versions":1}` / 26.3（777, wasm-gc） |
 | `/` 启动页 | 正常列出 26.3 |
 | `/client/26.3/assets/test.js` | 200；路径穿越 404 |
-| `/play?version=26.3` | 200，`Content-Length: 78124960`；含 `joinServer`，无 `,,` |
+| `/play?version=26.3` | 200，播放壳（iframe + 工具栏 + 加载层） |
+| `/play/raw?version=26.3` | 200，`Content-Length: 78124960`；含 `joinServer`，无 `,,` |
 | `/embed?...` | 200，iframe + `WebMC` 脚本；CSP frame-ancestors 生效 |
 | token | 无 token 401；带 token 200；embed 带 token 200 |
 | 无头 Edge | 首次 Edit Profile → Done、Default Username → Continue Anyway 后自动连测试服（白名单踢出） |
@@ -239,13 +240,17 @@ docker build -t orzmc-webmc:dev .
 
 多版本生产验收（2026-11-23，`https://webmc.jokerhub.cn`）：
 
-| 版本 | `/play` | 注入 | 验证 |
+| 版本 | `/play/raw` | 注入 | 验证 |
 |---|---|---|---|
 | `1.8.8` | 200 / 34,880,416 B | 强制 `joinServer` | EaglerXServer v3/47 握手成功 |
 | `1.12.2` | 200 / 42,935,637 B | 强制 `joinServer` | EaglerXServer v3/v4/340 握手成功 |
 | `26.2` | 200 / 76,841,411 B | 缓存补丁 | 无头 Edge 自动连服（白名单踢出） |
 | `26.3` | 200 / 78,394,945 B | 缓存补丁 | 无头 Edge 自动连服（白名单踢出） |
 
-> 首次 `/play` 在 `/mnt/e`（Windows 文件系统）生成补丁约 40s，缓存后约 13s；
+播放壳生产验收（2026-11-23，`webmc 0.1.2`）：`/play` 返回 6,820 B 壳（含 iframe/全屏/加载层）；
+`/play/raw` 78,394,945 B；无头 Edge 已显示客户端 profile，工具栏「全屏/小窗」与刷新可用；
+加载层在 iframe `load` 后隐藏。
+
+> 首次 `/play/raw` 在 `/mnt/e`（Windows 文件系统）生成补丁约 40s，缓存后约 13s；
 > Docker/ext4 约 6s。多阶段 `Dockerfile` 因本机 Docker Hub 拉取超时未跑；`gradle:9.9-jdk21`
 > 标签已核对存在，需在 CI/生产机跑一次。真实客户端文件只用于本地验证，**没有**提交到仓库/镜像。
