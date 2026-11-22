@@ -66,7 +66,8 @@ webclient.example.com {
 https://webclient.example.com/play?version=26.3&server=wss%3A%2F%2Fyour-host%3A443
 ```
 
-- 官方 26.3 客户端不读 `?server=`；服务首次访问时在缓存里生成注入版
+- `/play` 是带工具栏的播放壳：默认窗口模式，可「全屏 / 小窗」切换；首次加载显示进度反馈。
+- 官方 26.x 客户端不读 `?server=`；服务首次访问时在缓存里生成注入版
   （`eaglercraftXOpts.joinServer`），源文件不改、镜像不存客户端。
 - 首次启动仍会走客户端自己的 **Edit Profile → Done**、**Default Username → Continue Anyway**；
   之后同一浏览器不再问。
