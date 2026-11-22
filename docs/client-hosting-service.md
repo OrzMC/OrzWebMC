@@ -59,8 +59,9 @@ data/versions/
 | 方法/路径 | 作用 |
 |---|---|
 | `GET /` | 极简启动页：版本列表 + 服务器地址输入 |
-| `GET /play?version=26.3&server=wss://host:port` | 返回该版本客户端 HTML（已注入 `joinServer`）；`joinServer` 参数也接受 |
-| `GET /embed?version=26.3&server=wss://...` | 可 iframe 的最小外壳；暴露 `window.WebMC` |
+| `GET /play?version=26.3&server=wss://host:port` | 播放壳：工具栏 + 大小屏切换 + 加载反馈，内部 iframe 加载 `/play/raw` |
+| `GET /play/raw?version=26.3&server=...` | 真正的客户端 HTML（已注入 `joinServer`）；供 `/play`/`/embed` 内部使用 |
+| `GET /embed?version=26.3&server=wss://...` | 可 iframe 的最小外壳（含加载反馈）；暴露 `window.WebMC` |
 | `GET /api/versions` | 版本清单 JSON（id/name/protocol/runtime/notes/playUrl/embedUrl），带 CORS |
 | `GET /api/health` | `{"status":"ok","versions":N}` |
 | `GET /client/<version>/<path>` | 版本目录内静态文件（扩展名白名单、防路径穿越） |
@@ -76,6 +77,13 @@ https://webclient.example.com/embed?version=26.3&server=wss%3A%2F%2Fdev.jokerhub
 - `launch=1` 等官方站参数会被忽略（服务端自己启动客户端，不经过官方站外壳）。
 - 官方 26.3 客户端首次启动仍会走 **Edit Profile → Done**、**Default Username → Continue Anyway**；
   之后同一浏览器（同源 IndexedDB）不再问。
+
+### 播放壳（`/play`）
+
+- 默认**窗口模式**（最大 1180×820），右上角「全屏」切成铺满视口，「小窗」切回；不强制进入全屏。
+- 工具栏显示版本、服务器地址，提供「刷新」和回版本列表；`?full=1` 可直接以全屏模式打开。
+- 内嵌客户端在首次加载时显示加载层（动画 + 已用时间 + 10–60 秒提示），客户端 HTML 加载完成后隐藏；客户端自身的启动画面随后接管。
+- `/play/raw` 保留无壳的原始客户端 HTML，便于调试或自定义外壳；`/embed` 也使用它，避免嵌套工具栏。
 
 ### 外嵌 API
 
@@ -110,8 +118,8 @@ WebMC.reload()
 
 ## 5. 运行（Docker，推荐）
 
-> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.1`（以及 `latest`），
-> digest `sha256:eeb28e3bc2499d69ae89ec3ae133c9b92a19c4afe89ba5eb3e87bbb0d171e47a`。
+> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.2`（以及 `latest`），
+> digest 见 GitHub Packages / Release 记录。
 > GHCR 包已设为 **public**，可直接 `docker pull`（无需登录）；也可用本仓库
 > `docker-compose.yml` 的 `build: .` 本地构建。
 
@@ -170,7 +178,7 @@ webclient.example.com {
 ```yaml
 services:
   webmc:
-    image: ghcr.io/orzmc/orzmc-webmc:0.1.1
+    image: ghcr.io/orzmc/orzmc-webmc:0.1.2
     restart: unless-stopped
     ports:
       - "127.0.0.1:8300:8300"

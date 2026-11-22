@@ -22,13 +22,13 @@ class RoutesTest {
         return root
     }
 
-    private fun cfg(data: Path, token: String? = null) = Config(
+    private fun cfg(data: Path, token: String? = null, frameAncestors: String = "*") = Config(
         host = "127.0.0.1",
         port = 0,
         dataDir = data,
         cacheDir = data.resolve(".cache"),
         defaultVersion = null,
-        frameAncestors = "*",
+        frameAncestors = frameAncestors,
         accessToken = token,
         corsOrigin = "*",
         publicBaseUrl = null,
@@ -46,11 +46,19 @@ class RoutesTest {
 
         val play = client.get("/play?version=26.3")
         assertEquals(HttpStatusCode.OK, play.status)
-        assertContains(play.bodyAsText(), "joinServer")
+        assertContains(play.bodyAsText(), "<iframe")
+        assertContains(play.bodyAsText(), "/play/raw?version=26.3")
+        assertContains(play.bodyAsText(), "全屏")
+
+        val raw = client.get("/play/raw?version=26.3&server=wss%3A%2F%2Fexample.com")
+        assertEquals(HttpStatusCode.OK, raw.status)
+        assertContains(raw.bodyAsText(), "joinServer")
+        assertContains(raw.headers["Content-Security-Policy"].orEmpty(), "frame-ancestors *")
 
         val embed = client.get("/embed?version=26.3&server=wss%3A%2F%2Fexample.com")
         assertEquals(HttpStatusCode.OK, embed.status)
         assertContains(embed.bodyAsText(), "<iframe")
+        assertContains(embed.bodyAsText(), "/play/raw?")
 
         val root = client.get("/")
         assertEquals(HttpStatusCode.OK, root.status)
@@ -63,6 +71,16 @@ class RoutesTest {
         val asset = client.get("/client/26.3/assets/test.js")
         assertEquals(HttpStatusCode.OK, asset.status)
         assertContains(asset.bodyAsText(), "console.log")
+    }
+
+    @Test
+    fun rawClientAllowsSameOriginFramingWhenAncestorsConfigured() = testApplication {
+        val data = makeData()
+        application { module(cfg(data, frameAncestors = "https://example.com")) }
+
+        val raw = client.get("/play/raw?version=26.3")
+        assertEquals(HttpStatusCode.OK, raw.status)
+        assertContains(raw.headers["Content-Security-Policy"].orEmpty(), "'self' https://example.com")
     }
 
     @Test
@@ -81,6 +99,8 @@ class RoutesTest {
 
         assertEquals(HttpStatusCode.Unauthorized, client.get("/play?version=26.3").status)
         assertEquals(HttpStatusCode.OK, client.get("/play?version=26.3&token=secret").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/play/raw?version=26.3").status)
+        assertEquals(HttpStatusCode.OK, client.get("/play/raw?version=26.3&token=secret").status)
         assertEquals(HttpStatusCode.OK, client.get("/api/versions").status)
     }
 }

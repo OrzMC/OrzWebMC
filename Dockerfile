@@ -8,7 +8,7 @@ COPY src ./src
 RUN gradle --no-daemon installDist
 
 # 运行阶段：只带 JRE 与构建产物；客户端本体由用户挂载到 /data，不进镜像
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 
 RUN groupadd -r webmc && useradd -r -g webmc -d /opt/webmc -s /usr/sbin/nologin webmc
 WORKDIR /opt/webmc
