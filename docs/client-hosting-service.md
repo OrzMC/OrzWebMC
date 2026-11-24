@@ -1,6 +1,6 @@
 # Web 客户端托管服务（webmc）
 
-> **状态**：可运行 / 本地验收通过（2026-11-22）。Kotlin 2.4 + Ktor 3.6；单容器，数据目录挂载。
+> **状态**：可运行 / 本地与生产验收通过（2026-11-24 键盘/IME 修复）。Kotlin 2.4 + Ktor 3.6；单容器，数据目录挂载。
 > **定位**：给「Eaglercraft 网页客户端」提供一个**自托管入口、深链、外嵌**服务。
 > **不包含客户端本体**：客户端由部署者自行下载放进数据目录，镜像/仓库/发布物零客户端文件。
 
@@ -48,7 +48,9 @@ data/versions/
 - 官方 26.3 HTML 不读 `?server=`；服务在**首次访问**时生成一份**缓存补丁**：
   在 `window.eaglercraftXOpts = {` 后注入 `joinServer: URLSearchParams(...).get("server")`。
   源文件不改；补丁文件在 `WEBMC_CACHE_DIR`（默认临时目录；容器内 `/tmp/webmc-cache`），不在镜像/仓库。
-- 客户端本身已支持 `joinServer` 时原样提供；`meta.inject=none` 可强制关闭注入。
+- 客户端本身已支持 `joinServer` 时不重复注入；`meta.inject=none` 可强制关闭 `joinServer` 注入（键盘兜底脚本仍按 `keyboardShim` 生效）。
+- 另外还会在客户端 HTML 的 `<head>` 注入**键盘兜底脚本**（见下文「键盘与输入法」）；
+  想关掉用 `meta.json` 的 `"keyboardShim": false`。
 - ⚠️ 官方 **1.8.8 / 1.12.2** 代码里本来就有 `joinServer` 选项名，但不会读 URL；
   必须写 `"inject": "joinServer"` 强制注入，否则 `auto` 会原样返回、深链不自动连服。
 
@@ -60,7 +62,7 @@ data/versions/
 |---|---|
 | `GET /` | 极简启动页：版本列表 + 服务器地址输入 |
 | `GET /play?version=26.3&server=wss://host:port` | 播放壳：工具栏 + 大小屏切换 + 加载反馈，内部 iframe 加载 `/play/raw` |
-| `GET /play/raw?version=26.3&server=...` | 真正的客户端 HTML（已注入 `joinServer`）；供 `/play`/`/embed` 内部使用 |
+| `GET /play/raw?version=26.3&server=...` | 真正的客户端 HTML（已注入 `joinServer` + 键盘兜底脚本）；供 `/play`/`/embed` 内部使用 |
 | `GET /embed?version=26.3&server=wss://...` | 可 iframe 的最小外壳（含加载反馈）；暴露 `window.WebMC` |
 | `GET /api/versions` | 版本清单 JSON（id/name/protocol/runtime/notes/playUrl/embedUrl），带 CORS |
 | `GET /api/health` | `{"status":"ok","versions":N}` |
@@ -83,11 +85,53 @@ https://webclient.example.com/embed?version=26.3&server=wss%3A%2F%2Fdev.jokerhub
 - 默认**窗口模式**（最大 1180×820），右上角「全屏」切成铺满视口，「小窗」切回；不强制进入全屏。
 - 工具栏显示版本、服务器地址，提供「刷新」和回版本列表；`?full=1` 可直接以全屏模式打开。
 - 内嵌客户端在首次加载时显示加载层（动画 + 已用时间 + 10–60 秒提示），客户端 HTML 加载完成后隐藏；客户端自身的启动画面随后接管。
+- 切「全屏 / 小窗」、点「刷新」之后会把 DOM 焦点交还给客户端 iframe：`keydown` 只发给当前有焦点的
+  文档，焦点留在外层工具条上时游戏收不到任何按键（包括 `/`）。
 - `/play/raw` 保留无壳的原始客户端 HTML，便于调试或自定义外壳；`/embed` 也使用它，避免嵌套工具栏。
+
+### 键盘与输入法（IME）
+
+> **症状**：客户端连上服务器后，开着中文输入法时打不出字；`/` 开不了聊天框（或开了但字符全丢），
+> 于是 `/login` 之类命令没法输入。
+>
+> **根因（读 1.8.8 客户端代码 + 浏览器实测确认）**：Eaglercraft 不用 DOM 文本框，自己在 `window` 上
+> 收 `keydown`：字符取自 `event.key`（**只认单字符**），键码取自 `event.code`→键盘布局表，失败再退到
+> `event.which || event.keyCode`。输入法激活时浏览器发的是
+> `keyCode = 229` / `key = "Process"` / `isComposing = true`（`code` 仍是物理键位，如 `Slash`），
+> 客户端因此拿不到字符；`/` 能否开聊天框还取决于浏览器是否给了键盘布局表（实测：给了能开框，
+> 但后续字母仍然全丢）。
+>
+> **修法**：服务在 `/play/raw` 返回的客户端 HTML 的 `<head>` 里注入一段 ES5 脚本
+> （`src/main/kotlin/dev/orzmc/webmc/KeyboardShim.kt`），在捕获阶段把 IME 事件按**物理键位**
+> 改写成正常按键（`key` / `keyCode` / `which` 齐全）再派发给客户端，原事件吞掉。
+> 等价于「输入法开着时，按键按英文键盘语义生效」。
+>
+> **边界**：
+> - 只保证英文语义（ASCII + 常用控制键）；**中文文本不会进入游戏**（客户端只认单字符 `event.key`，
+>   且 1.8.x 字体没有 CJK 字形）。要打中文请切英文输入法输入 ASCII，或在游戏外复制粘贴
+>   （客户端支持 `Ctrl+V`）。
+> - 客户端若把自己隐藏的 `<input>` 聚焦来做文本输入（部分版本的软键盘路径），脚本自动让路，
+>   不会与客户端自身处理重复上屏。
+> - 关掉：`meta.json` 写 `"keyboardShim": false`（排查用，或客户端上游修好后）。
+>
+> **各版本差异（2026-11-24 实测）**：
+>
+> | 版本 | 文本输入路径 | 英文 | 中文（IME） | shim 作用 |
+> |---|---|---|---|---|
+> | `1.8.8` / `1.12.2` | 客户端自己收 `keydown`，只认单字符 `event.key` | ✅（IME 关闭时） | ❌ 进不了游戏 | 必需：IME 开着时按物理键位还原 |
+> | `26.2` / `26.3` | **真实 DOM `<input type=text>`**（自动聚焦），吃 `beforeinput`/`composition*` | ✅ | ✅ 组合提交能上屏，CJK 字形正常显示 | 仅在没有文本框聚焦时生效（如 IME 开着按 `/` 开聊天）；文本框聚焦时自动让路，实测不重复上屏 |
+>
+> 也就是说：**26.3 天生支持中英文输入**；`1.8.8`/`1.12.2` 只支持英文语义（中文无论如何都进不去，
+> 客户端只认单字符 `key`、字体也没有 CJK 字形）。
+>
+> **验收（2026-11-24，无头 Edge + 真实官方客户端）**：进单人世界后，用 CDP 派发
+> `keyCode 229 / key Process / code Slash|KeyL…` 模拟输入法：
+> 有 shim 时聊天框打出 `/login`；`keyboardShim: false` 的同一客户端只打出 `/`（字母全丢）。
+> 26.3（wasm-gc）打上 shim 后正常启动到 Edit Profile、无 JS 错误。
 
 ### 外嵌 API
 
-`/embed` 内是 `<iframe allow="fullscreen; gamepad; pointer-lock; clipboard-write; autoplay">`，并暴露：
+`/embed` 内是 `<iframe allow="fullscreen; gamepad; pointer-lock; keyboard-map; keyboard-lock; clipboard-write; autoplay">`，并暴露：
 
 ```js
 WebMC.join('wss://host:port')   // 切换服务器
@@ -118,8 +162,8 @@ WebMC.reload()
 
 ## 5. 运行（Docker，推荐）
 
-> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.2`（以及 `latest`），
-> digest `sha256:ef0fb1d7dceab28c153f067b01ca3d403bfbd3486123a12410bc2dc822dc4fd7`。
+> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.3`（以及 `latest`；0.1.2 为上一个版本，digest
+> `sha256:ef0fb1d7dceab28c153f067b01ca3d403bfbd3486123a12410bc2dc822dc4fd7`；0.1.3 的 digest 发布后补记）。
 > GHCR 包已设为 **public**，可直接 `docker pull`（无需登录）；也可用本仓库
 > `docker-compose.yml` 的 `build: .` 本地构建。
 
@@ -178,7 +222,7 @@ webclient.example.com {
 ```yaml
 services:
   webmc:
-    image: ghcr.io/orzmc/orzmc-webmc:0.1.2
+    image: ghcr.io/orzmc/orzmc-webmc:0.1.3
     restart: unless-stopped
     ports:
       - "127.0.0.1:8300:8300"
@@ -236,6 +280,8 @@ docker build -t orzmc-webmc:dev .
 | `/embed?...` | 200，iframe + `WebMC` 脚本；CSP frame-ancestors 生效 |
 | token | 无 token 401；带 token 200；embed 带 token 200 |
 | 无头 Edge | 首次 Edit Profile → Done、Default Username → Continue Anyway 后自动连测试服（白名单踢出） |
+| **IME 输入（2026-11-24）** | 1.8.8 单人世界 + `keyCode 229/key Process` 模拟输入法：有 shim 打出 `/login`；`keyboardShim: false` 只打出 `/`（字母全丢） |
+| **26.3 兼容** | 注入 shim 后 26.3 正常启动到 Edit Profile，控制台无 JS 错误；补丁耗时约 0.4 s（78 MB） |
 | Docker 运行镜像（temurin 25 本地验证） | 健康/API/`/play` 200（78,124,960 B，约 6s）；缓存生成正常 |
 
 多版本生产验收（2026-11-23，`https://webmc.jokerhub.cn`）：

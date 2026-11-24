@@ -15,7 +15,11 @@ class RoutesTest {
     private fun makeData(): Path {
         val root = Files.createTempDirectory("webmc-routes")
         val dir = Files.createDirectories(root.resolve("26.3"))
-        Files.writeString(dir.resolve("client.html"), """<script>window.eaglercraftXOpts = { container: "x" };</script>""")
+        Files.writeString(
+            dir.resolve("client.html"),
+            """<html><head><meta charset="utf-8"></head><body>""" +
+                """<script>window.eaglercraftXOpts = { container: "x" };</script></body></html>""",
+        )
         Files.writeString(dir.resolve("meta.json"), """{"id":"26.3","name":"Test Client","protocol":777,"runtime":"wasm-gc"}""")
         Files.createDirectories(dir.resolve("assets"))
         Files.writeString(dir.resolve("assets/test.js"), "console.log('ok');")
@@ -49,10 +53,12 @@ class RoutesTest {
         assertContains(play.bodyAsText(), "<iframe")
         assertContains(play.bodyAsText(), "/play/raw?version=26.3")
         assertContains(play.bodyAsText(), "全屏")
+        assertContains(play.bodyAsText(), "keyboard-map")
 
         val raw = client.get("/play/raw?version=26.3&server=wss%3A%2F%2Fexample.com")
         assertEquals(HttpStatusCode.OK, raw.status)
         assertContains(raw.bodyAsText(), "joinServer")
+        assertContains(raw.bodyAsText(), "OrzWebMC keyboard shim")
         assertContains(raw.headers["Content-Security-Policy"].orEmpty(), "frame-ancestors *")
 
         val embed = client.get("/embed?version=26.3&server=wss%3A%2F%2Fexample.com")

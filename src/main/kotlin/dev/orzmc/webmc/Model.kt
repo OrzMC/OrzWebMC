@@ -22,8 +22,10 @@ internal data class MetaFile(
     val protocol: Int? = null,
     val runtime: String? = null,
     val notes: String? = null,
-    /** auto（默认）/ joinServer（强制注入）/ none（原样提供） */
+    /** auto（默认）/ joinServer（强制注入）/ none（不注入 joinServer） */
     val inject: String? = null,
+    /** 是否注入键盘兜底脚本（IME 场景）；缺省 true，`false` 关闭 */
+    val keyboardShim: Boolean? = null,
 )
 
 internal enum class InjectMode { AUTO, JOIN_SERVER, NONE }
@@ -33,4 +35,5 @@ internal data class VersionEntry(
     val dir: Path,
     val client: Path,
     val inject: InjectMode,
+    val keyboardShim: Boolean = true,
 )

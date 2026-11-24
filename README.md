@@ -4,10 +4,10 @@
 > **不包含客户端本体**：客户端由部署者自行从官方来源下载，放进挂载的数据目录；
 > 本仓库、Docker 镜像与发布物**零客户端文件**。
 >
-> **状态**：可运行（Kotlin 2.4 + Ktor 3.6，2026-11-22）。原「自研协议网关」线已暂缓，
+> **状态**：可运行（Kotlin 2.4 + Ktor 3.6，2026-11-24）。原「自研协议网关」线已暂缓，
 > 因为目标「浏览器能进服」用「官方深链 + 自托管兜底」已经满足。
 >
-> **最后更新**：2026-11-22
+> **最后更新**：2026-11-24
 
 ---
 
@@ -71,6 +71,10 @@ https://webclient.example.com/play?version=26.3&server=wss%3A%2F%2Fyour-host%3A4
   （`eaglercraftXOpts.joinServer`），源文件不改、镜像不存客户端。
 - 首次启动仍会走客户端自己的 **Edit Profile → Done**、**Default Username → Continue Anyway**；
   之后同一浏览器不再问。
+- 服务会往客户端 HTML 里注入一小段**键盘兜底脚本**：开着中文/日文输入法（IME）时也能正常按键，
+  否则客户端会丢掉所有字符、`/login` 之类命令打不出来。详见
+  [`docs/client-hosting-service.md`](docs/client-hosting-service.md) §3「键盘与输入法（IME）」。
+  不需要时在 `meta.json` 写 `"keyboardShim": false`。
 - 不同版本：放 `data/versions/<id>/client.html`，访问 `?version=<id>`。
   官方可用版本：`1.8.8`（47）、`1.12.2`（340）、`26.2`（776）、`26.3`（777）。
   1.8.8/1.12.2 的 `meta.json` 必须写 `"inject": "joinServer"`（否则深链不会自动连服）。
@@ -89,7 +93,8 @@ data/versions/
 ```
 
 - 目录名 = 版本 id；`meta.json` 可覆盖展示名/入口/协议号等。
-- `inject`: `auto`（默认）/ `joinServer`（强制注入）/ `none`（原样提供）。
+- `inject`: `auto`（默认）/ `joinServer`（强制注入）/ `none`（不注入 `joinServer`）。
+  `keyboardShim`: 是否注入键盘兜底脚本，默认 `true`。
 - 新增/更新版本后重启服务；`data/versions` 与 `data/.cache` 都不进 Git。
 
 详见 [`data/versions/README.md`](data/versions/README.md)。

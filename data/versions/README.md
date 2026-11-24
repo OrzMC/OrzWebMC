@@ -19,7 +19,9 @@ data/versions/
 - 服务会**自动发现**版本；新增/更新后重启服务（或等待后续热加载）。
 - 官方 26.3 客户端不读 `?server=`；服务会在首次访问时于内存/缓存中注入
   `eaglercraftXOpts.joinServer`（不修改源文件，不在仓库/镜像里保存 patch 后的本体）。
-  如果客户端本身已支持 `joinServer`，会原样提供。
+  如果客户端本身已支持 `joinServer`，就只注入键盘兜底脚本。
+- 键盘兜底脚本（`KeyboardShim.kt`）固定在 `<head>` 后注入，用来修「开输入法打不出字」；
+  `meta.json` 的 `"keyboardShim": false` 可关掉。
 - ⚠️ **1.8.8 / 1.12.2 必须写 `"inject": "joinServer"`**：这两个官方离线版代码里本来就有
   `joinServer` 选项名，但不会从 URL 读取；`auto` 会误判为“已支持”而原样返回，深链不会自动连服。
 
@@ -47,7 +49,8 @@ data/versions/
   "protocol": 777,
   "runtime": "wasm-gc",
   "notes": "官方 26.3 单文件客户端",
-  "inject": "auto"
+  "inject": "auto",
+  "keyboardShim": true
 }
 ```
 
@@ -59,7 +62,8 @@ data/versions/
 | `protocol` | MC 协议号（仅展示/API） |
 | `runtime` | `wasm-gc` / `js` 等（仅展示） |
 | `notes` | 备注 |
-| `inject` | `auto`（默认）/ `joinServer`（强制注入）/ `none`（原样提供） |
+| `keyboardShim` | 是否注入键盘兜底脚本（IME 场景）；缺省 `true`，`false` 关闭；见 `docs/client-hosting-service.md` §3 |
+| `inject` | `auto`（默认）/ `joinServer`（强制注入）/ `none`（不注入 `joinServer`，键盘兜底仍生效） |
 
 ## 合法获取
 
