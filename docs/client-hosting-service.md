@@ -114,6 +114,16 @@ https://webclient.example.com/embed?version=26.3&server=wss%3A%2F%2Fdev.jokerhub
 >   不会与客户端自身处理重复上屏。
 > - 关掉：`meta.json` 写 `"keyboardShim": false`（排查用，或客户端上游修好后）。
 >
+> **各版本差异（2026-11-24 实测）**：
+>
+> | 版本 | 文本输入路径 | 英文 | 中文（IME） | shim 作用 |
+> |---|---|---|---|---|
+> | `1.8.8` / `1.12.2` | 客户端自己收 `keydown`，只认单字符 `event.key` | ✅（IME 关闭时） | ❌ 进不了游戏 | 必需：IME 开着时按物理键位还原 |
+> | `26.2` / `26.3` | **真实 DOM `<input type=text>`**（自动聚焦），吃 `beforeinput`/`composition*` | ✅ | ✅ 组合提交能上屏，CJK 字形正常显示 | 仅在没有文本框聚焦时生效（如 IME 开着按 `/` 开聊天）；文本框聚焦时自动让路，实测不重复上屏 |
+>
+> 也就是说：**26.3 天生支持中英文输入**；`1.8.8`/`1.12.2` 只支持英文语义（中文无论如何都进不去，
+> 客户端只认单字符 `key`、字体也没有 CJK 字形）。
+>
 > **验收（2026-11-24，无头 Edge + 真实官方客户端）**：进单人世界后，用 CDP 派发
 > `keyCode 229 / key Process / code Slash|KeyL…` 模拟输入法：
 > 有 shim 时聊天框打出 `/login`；`keyboardShim: false` 的同一客户端只打出 `/`（字母全丢）。
