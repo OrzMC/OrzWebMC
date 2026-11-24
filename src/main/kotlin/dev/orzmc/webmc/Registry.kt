@@ -85,8 +85,16 @@ internal class VersionRegistry(private val dataDir: Path) {
             runtime = meta.runtime?.takeIf { it.isNotBlank() } ?: "",
             notes = meta.notes ?: "",
         )
-        log.info("version {}: {} (client={}, inject={})", id, info.name, clientName, inject)
-        return VersionEntry(info, dir, client, inject)
+        val keyboardShim = meta.keyboardShim ?: true
+        log.info(
+            "version {}: {} (client={}, inject={}, keyboardShim={})",
+            id,
+            info.name,
+            clientName,
+            inject,
+            keyboardShim,
+        )
+        return VersionEntry(info, dir, client, inject, keyboardShim)
     }
 
     private fun compareVersion(a: String, b: String): Int {

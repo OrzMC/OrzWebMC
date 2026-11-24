@@ -240,7 +240,7 @@ fun Application.module(cfg: Config) {
                     </header>
                     <main class="stage">
                       <iframe id="game" title="${esc(entry.info.name)}" data-src="/play/raw?${esc(rawQuery)}"
-                        allow="fullscreen; gamepad; pointer-lock; clipboard-write; autoplay" allowfullscreen></iframe>
+                        allow="fullscreen; gamepad; pointer-lock; keyboard-map; keyboard-lock; clipboard-write; autoplay" allowfullscreen></iframe>
                       <div id="loading" class="loading" role="status" aria-live="polite">
                         <div class="spinner" aria-hidden="true"></div>
                         <h2>正在加载客户端</h2>
@@ -264,6 +264,11 @@ fun Application.module(cfg: Config) {
                     loading.classList.toggle('hidden',!on);
                     loading.setAttribute('aria-hidden',on?'false':'true');
                   }
+                  // 键盘事件只发给文档焦点所在的 frame：工具条按钮被点过后焦点留在外层，
+                  // 这时按 / 或 WASD 客户端都收不到，所以每次操作完都把焦点还给客户端。
+                  function focusGame(){
+                    try{frame.contentWindow.focus();}catch(e){try{frame.focus();}catch(e2){}}
+                  }
                   function updateElapsed(){
                     var n=Math.floor((Date.now()-started)/1000);
                     elapsed.textContent=n+' 秒';
@@ -279,6 +284,7 @@ fun Application.module(cfg: Config) {
                   frame.addEventListener('load',function(){
                     clearInterval(ticker);
                     setTimeout(function(){setLoading(false);},350);
+                    focusGame();
                   });
                   beginLoad();
                   frame.src=frame.getAttribute('data-src');
@@ -287,10 +293,12 @@ fun Application.module(cfg: Config) {
                     shell.classList.toggle('full',full);
                     sizeButton.textContent=full?'小窗':'全屏';
                     sizeButton.setAttribute('aria-pressed',String(full));
+                    focusGame();
                   });
                   reloadButton.addEventListener('click',function(){
                     beginLoad();
                     frame.src=frame.getAttribute('data-src');
+                    focusGame();
                   });
                 })();
                 </script>
@@ -345,11 +353,12 @@ fun Application.module(cfg: Config) {
                 </style>
                 </head><body>
                 <div id="loading" class="loading"><div class="spinner"></div><span>正在加载客户端…</span></div>
-                <iframe id="game" data-src="/play/raw?${esc(q)}" allow="fullscreen; gamepad; pointer-lock; clipboard-write; autoplay" allowfullscreen></iframe>
+                <iframe id="game" data-src="/play/raw?${esc(q)}" allow="fullscreen; gamepad; pointer-lock; keyboard-map; keyboard-lock; clipboard-write; autoplay" allowfullscreen></iframe>
                 <script>
                 (function(){
                   var frame=document.getElementById('game');
                   var loading=document.getElementById('loading');
+                  function focusGame(){try{frame.contentWindow.focus();}catch(e){try{frame.focus();}catch(e2){}}}
                   function setParam(k,v){var u=new URL(frame.getAttribute('data-src'),location.href);u.searchParams.set(k,v);frame.setAttribute('data-src',u.toString());loading.classList.remove('hidden');frame.src=u.toString();}
                   window.WebMC={
                     join:function(server){setParam('server',server);},
@@ -358,6 +367,7 @@ fun Application.module(cfg: Config) {
                   };
                   frame.addEventListener('load',function(){
                     loading.classList.add('hidden');
+                    focusGame();
                     try{parent.postMessage({type:'webmc:ready',version:${js(entry.info.id)},server:${js(server)}},'*');}catch(e){}
                   });
                   frame.src=frame.getAttribute('data-src');
