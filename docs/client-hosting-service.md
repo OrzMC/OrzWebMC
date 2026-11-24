@@ -162,8 +162,9 @@ WebMC.reload()
 
 ## 5. 运行（Docker，推荐）
 
-> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.3`（以及 `latest`；0.1.2 为上一个版本，digest
-> `sha256:ef0fb1d7dceab28c153f067b01ca3d403bfbd3486123a12410bc2dc822dc4fd7`；0.1.3 的 digest 发布后补记）。
+> 已发布镜像：`ghcr.io/orzmc/orzmc-webmc:0.1.3`（以及 `latest`），
+> digest `sha256:4db81dd63e948e7afe166ab6783c31f22ca51d641193d72c8c6f3b0e61eff6b4`
+> （上一版 0.1.2 digest `sha256:ef0fb1d7dceab28c153f067b01ca3d403bfbd3486123a12410bc2dc822dc4fd7`）。
 > GHCR 包已设为 **public**，可直接 `docker pull`（无需登录）；也可用本仓库
 > `docker-compose.yml` 的 `build: .` 本地构建。
 
